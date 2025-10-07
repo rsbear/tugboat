@@ -1,0 +1,13 @@
+{
+  "name": "mini-svelte-ts",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "svelte": "^5.38.5"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@tugboats/core",
+  "version": "0.0.10",
+  "type": "module",
+  "scripts": {
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  }
+}

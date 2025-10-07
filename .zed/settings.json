@@ -1,0 +1,32 @@
+{
+  // "code_actions_on_format": {
+  //   "source.organizeImports.biome": true,
+  //   "source.fixAll.biome": true
+  // },
+
+  "lsp": {
+    "deno": {
+      "settings": {
+        "deno": {
+          "enable": true
+        }
+      }
+    }
+  },
+  "languages": {
+    "JavaScript": {
+      "language_servers": ["deno", "!vtsls", "!biome", "!eslint"],
+      "formatter": "language_server"
+    },
+    "TypeScript": {
+      "language_servers": ["deno", "!vtsls", "!biome", "!eslint"],
+      // "formatter": { "language_server": { "name": "biome" } }
+      "formatter": "language_server"
+    },
+    "TSX": {
+      "language_servers": ["deno", "!vtsls", "!biome", "!eslint"],
+      // "formatter": { "language_server": { "name": "biome" } }
+      "formatter": "language_server"
+    }
+  }
+}

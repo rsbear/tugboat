@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", // modern JS output
+    "module": "ESNext", // always ESM
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true, // since you’re using .ts/.svelte extensions
+    "noEmit": true, // no output, let tsup handle builds
+    "strict": true, // type‑safety ftw
+    "skipLibCheck": true, // faster builds, safe for most cases
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true
+  }
+}
