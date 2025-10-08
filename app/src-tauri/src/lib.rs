@@ -6,6 +6,7 @@ use tokio::process::Command;
 pub mod kv;
 pub mod bundler;
 pub mod devmode;
+pub mod git_url_parser;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -19,6 +20,7 @@ async fn clone_repo(
     dir_path: String,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    
     // Resolve ~ to home directory
     let resolved_path = if dir_path.starts_with("~/") {
         let home = dirs::home_dir().ok_or("Could not find home directory")?;
@@ -29,15 +31,8 @@ async fn clone_repo(
         std::path::PathBuf::from(&dir_path)
     };
 
-    // Extract repository name from GitHub URL for directory naming
-    let repo_name = extract_repo_name(&github_url)?;
-
-    // Determine final target directory
-    let target_dir = if resolved_path.ends_with("tugboat_apps") {
-        resolved_path.join(&repo_name)
-    } else {
-        resolved_path
-    };
+    // Determine final target directory (github_url parsing removed; use resolved_path as-is)
+    let target_dir = resolved_path;
 
     // Check if repository already exists (look for .git directory)
     if target_dir.join(".git").exists() {
@@ -56,43 +51,26 @@ async fn clone_repo(
             .map_err(|e| format!("❌ Failed to create directory {}: {}", parent.display(), e))?;
     }
 
-    // Run git clone
+    // Run git clone using provided URL (no parsing/transformation)
     run_git_clone(github_url, target_dir.to_string_lossy().to_string(), app).await
 }
 
-fn extract_repo_name(github_url: &str) -> Result<String, String> {
-    // Handle various GitHub URL formats:
-    // https://github.com/user/repo
-    // https://github.com/user/repo.git
-    // https://github.com/user/repo/tree/branch/path
-    // git@github.com:user/repo.git
-
-    let url = github_url.trim_end_matches('/');
-
-    if url.starts_with("git@github.com:") {
-        // SSH format: git@github.com:user/repo.git
-        let path_part = url.strip_prefix("git@github.com:").unwrap();
-        let repo_part = path_part.split('/').nth(1).unwrap_or("");
-        let repo_name = repo_part.strip_suffix(".git").unwrap_or(repo_part);
-        if repo_name.is_empty() {
-            return Err("Could not extract repository name from SSH URL".to_string());
-        }
-        return Ok(repo_name.to_string());
+async fn get_git_protocol_preference() -> Result<String, String> {
+    // Get preferences from KV store
+    let prefs_key = vec!["preferences".to_string(), "user".to_string()];
+    match kv::kv_get(prefs_key).await {
+        Ok(Some(item)) => {
+            let git_protocol = item.value.get("git_protocol")
+                .and_then(|p| p.as_str())
+                .unwrap_or("https");
+            Ok(git_protocol.to_string())
+        },
+        _ => Ok("https".to_string()) // Default to HTTPS
     }
-
-    if url.starts_with("https://github.com/") {
-        // HTTPS format: https://github.com/user/repo or https://github.com/user/repo/tree/branch/path
-        let path_part = url.strip_prefix("https://github.com/").unwrap();
-        let parts: Vec<&str> = path_part.split('/').collect();
-        if parts.len() >= 2 {
-            let repo_part = parts[1];
-            let repo_name = repo_part.strip_suffix(".git").unwrap_or(repo_part);
-            return Ok(repo_name.to_string());
-        }
-    }
-
-    Err("Unsupported GitHub URL format".to_string())
 }
+
+
+
 
 async fn run_git_clone(
     github_url: String,

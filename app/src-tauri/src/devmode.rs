@@ -134,14 +134,8 @@ impl DevModeManager {
                     PathBuf::from(dir)
                 };
 
-                // Extract repo name and build full path
-                let repo_name = extract_repo_name(github_url)?;
-                let full_clone_path = if resolved_dir.file_name()
-                    .and_then(|n| n.to_str()) == Some("tugboat_apps") {
-                    resolved_dir.join(&repo_name)
-                } else {
-                    resolved_dir
-                };
+                // Build full path without relying on github_url parsing
+                let full_clone_path = resolved_dir;
 
                 // For apps, we need to determine the actual app directory
                 // This might be a subdirectory if the URL had /tree/branch/subdir
@@ -154,18 +148,8 @@ impl DevModeManager {
         Err(format!("Clone alias '{}' not found in preferences", alias))
     }
 
-    async fn resolve_app_directory(&self, clone_path: &Path, github_url: &str) -> Result<PathBuf, String> {
-        // Check if URL has subdirectory specification
-        let subdir = parse_github_subdir(github_url);
-        
-        if let Some(sub) = subdir {
-            let app_dir = clone_path.join(sub);
-            if app_dir.exists() {
-                return Ok(app_dir);
-            }
-        }
-        
-        // Fall back to clone root
+    async fn resolve_app_directory(&self, clone_path: &Path, _github_url: &str) -> Result<PathBuf, String> {
+        // github_url parsing removed; always use clone root
         Ok(clone_path.to_path_buf())
     }
 
@@ -478,45 +462,4 @@ fn is_relevant_file_change(event: &Event) -> bool {
     }
 }
 
-fn extract_repo_name(github_url: &str) -> Result<String, String> {
-    let url = github_url.trim_end_matches('/');
 
-    if url.starts_with("git@github.com:") {
-        let path_part = url.strip_prefix("git@github.com:").unwrap();
-        let repo_part = path_part.split('/').nth(1).unwrap_or("");
-        let repo_name = repo_part.strip_suffix(".git").unwrap_or(repo_part);
-        if repo_name.is_empty() {
-            return Err("Could not extract repository name from SSH URL".to_string());
-        }
-        return Ok(repo_name.to_string());
-    }
-
-    if url.starts_with("https://github.com/") {
-        let path_part = url.strip_prefix("https://github.com/").unwrap();
-        let parts: Vec<&str> = path_part.split('/').collect();
-        if parts.len() >= 2 {
-            let repo_part = parts[1];
-            let repo_name = repo_part.strip_suffix(".git").unwrap_or(repo_part);
-            return Ok(repo_name.to_string());
-        }
-    }
-
-    Err("Unsupported GitHub URL format".to_string())
-}
-
-fn parse_github_subdir(url: &str) -> Option<String> {
-    // Parse subdirectory from GitHub URLs like:
-    // https://github.com/owner/repo/tree/branch/subdir
-    // git@github.com:owner/repo.git/tree/branch/subdir
-    
-    if let Some(tree_pos) = url.find("/tree/") {
-        let after_tree = &url[tree_pos + 6..]; // Skip "/tree/"
-        let parts: Vec<&str> = after_tree.split('/').collect();
-        if parts.len() >= 2 {
-            // parts[0] is branch, parts[1] is first level subdir
-            return Some(parts[1].to_string());
-        }
-    }
-    
-    None
-}

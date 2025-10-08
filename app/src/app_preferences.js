@@ -17,10 +17,11 @@ const prefsKV = kvTable("preferences");
 
 function getDefaultToml() {
   return toml.stringify({
-    harbor: {
-      harbor_theme: "vs-dark",
+    tugboat: {
+      tugboat_theme: "vs-dark",
       monaco_theme: "vs-dark",
       markdown_theme: "",
+      git_protocol: "ssh", // "https" or "ssh" - controls how GitHub URLs are handled
     },
     apps: [
       {
@@ -30,10 +31,6 @@ function getDefaultToml() {
       {
         alias: "no",
         github_url: app_repo_url_svelte,
-      },
-      {
-        alias: "private",
-        github_url: "git@github.com:rsbear/tugboat.git/tree/main/test_mini_react",
       },
     ],
     clones: [
@@ -88,17 +85,20 @@ async function initPreferences() {
   saveBtn.textContent = "Save Preferences";
   saveBtn.style.marginTop = "8px";
   container.appendChild(saveBtn);
-  
-  // Dev mode info
-  const devModeInfo = document.createElement("div");
-  devModeInfo.style.marginTop = "8px";
-  devModeInfo.style.fontSize = "12px";
-  devModeInfo.style.color = "#64748b";
-  devModeInfo.innerHTML = `
+
+  // Configuration info
+  const configInfo = document.createElement("div");
+  configInfo.style.marginTop = "8px";
+  configInfo.style.fontSize = "12px";
+  configInfo.style.color = "#64748b";
+  configInfo.innerHTML = `
+    <strong>Git Protocol:</strong> Set <code>git_protocol = "ssh"</code> to automatically transform HTTPS URLs to SSH for cloning.
+    <br>Only use HTTPS URLs in your configuration - they'll be converted to SSH if needed.
+    <br><br>
     <strong>Dev Mode:</strong> Type <code>alias:dev</code> to activate live development mode for any clone alias.
     <br>Example: <code>myapp:dev</code> will watch for changes and auto-rebuild.
   `;
-  container.appendChild(devModeInfo);
+  container.appendChild(configInfo);
 
   saveBtn.addEventListener("click", async () => {
     const tomlCode = editor.getValue();
@@ -202,36 +202,29 @@ async function handleAppsCloning(apps) {
         continue;
       }
 
-      // Normalize to base repo URL (trim any subpath like /tree/main/...)
-      const normalizedUrl = trimGithubUrlToRepo(app.github_url);
-      const repoName = extractRepoNameFromUrl(normalizedUrl);
-
-      // Determine first-level subdirectory (if any) from the original URL
-      const { subdir, truncated } = parseGithubFirstSubdir(app.github_url);
+      // Use original URL - let Rust backend handle all transformations
+      const repoName = extractRepoNameFromUrl(app.github_url);
 
       // Hardcode destination to ~/.tugboats/temp/<repoName>
       const repoRootDir = `~/.tugboats/temp/${repoName}`;
-      const appDir = subdir ? `${repoRootDir}/${subdir}` : repoRootDir;
 
-      addProgressLine(`\n[${i + 1}/${apps.length}] Processing app: ${repoName}`);
-      if (subdir) addProgressLine(`📄 Subdirectory specified: ${subdir}`);
-      if (truncated)
-        addProgressLine(`⚠️ Nested path deeper than one level detected; using first-level \"${subdir}\" only.`);
+      addProgressLine(
+        `\n[${i + 1}/${apps.length}] Processing app: ${repoName}`,
+      );
       addProgressLine(`📂 Repo clone target: ${repoRootDir}`);
-      addProgressLine(`📁 App directory (used for build): ${appDir}`);
 
       try {
         await window.__TAURI__.core.invoke("clone_repo", {
-          githubUrl: normalizedUrl,
+          githubUrl: app.github_url, // Pass original URL, let backend handle protocol transformation
           dirPath: repoRootDir,
         });
         addProgressLine(`✅ Completed app clone: ${repoName}`);
 
-        // After cloning, bundle the app using the resolved appDir and repoName as alias
-        addProgressLine(`🛠️ Bundling app at ${appDir} ...`);
+        // After cloning, bundle the app - backend will determine correct app directory
+        addProgressLine(`🛠️ Bundling app at ${repoRootDir} ...`);
         const bundleAlias = app.alias || repoName;
         const bundlePath = await window.__TAURI__.core.invoke("bundle_app", {
-          appDir: appDir,
+          appDir: repoRootDir, // Let bundler determine the correct subdirectory
           alias: bundleAlias,
         });
         addProgressLine(`📦 Bundle ready: ${bundlePath}`);
@@ -253,64 +246,6 @@ function extractRepoNameFromUrl(url) {
   } catch {
     return url;
   }
-}
-
-function trimGithubUrlToRepo(url) {
-  try {
-    // Handle HTTPS URLs like https://github.com/user/repo/... -> https://github.com/user/repo
-    const httpsMatch = url.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/?#]+)(?:[\/?#].*)?$/);
-    if (httpsMatch) {
-      const owner = httpsMatch[1];
-      const repo = httpsMatch[2].replace(/\.git$/, "");
-      return `https://github.com/${owner}/${repo}`;
-    }
-
-    // Handle SSH URLs like git@github.com:user/repo(.git)(/tree/branch/path...)
-    const sshMatch = url.match(/^git@github\.com:([^\/]+)\/([^\/\s]+)(?:\/.*)?$/);
-    if (sshMatch) {
-      const owner = sshMatch[1];
-      let repo = sshMatch[2];
-      
-      // Remove .git suffix if present, but ensure we add it back for consistency
-      repo = repo.replace(/\.git$/, "");
-      return `git@github.com:${owner}/${repo}.git`;
-    }
-  } catch (_) {
-    // fall through
-  }
-  return url;
-}
-
-// Parse the first-level subdirectory (if any) from a GitHub URL of the form
-// https://github.com/<owner>/<repo>/tree/<branch>/<subdir>(/ ...)
-// or git@github.com:<owner>/<repo>.git/tree/<branch>/<subdir>(/ ...)
-function parseGithubFirstSubdir(url) {
-  try {
-    // Handle HTTPS URLs
-    const httpsMatch = url.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/tree\/[^/]+\/(.+)$/);
-    if (httpsMatch) {
-      const rest = httpsMatch[1].replace(/\/+$/, "");
-      if (!rest) return { subdir: "", truncated: false };
-      const parts = rest.split("/");
-      const first = parts[0];
-      const truncated = parts.length > 1;
-      return { subdir: first, truncated };
-    }
-
-    // Handle SSH URLs with tree notation like git@github.com:user/repo.git/tree/branch/subdir
-    const sshMatch = url.match(/^git@github\.com:[^/]+\/[^/]+(?:\.git)?\/tree\/[^/]+\/(.+)$/);
-    if (sshMatch) {
-      const rest = sshMatch[1].replace(/\/+$/, "");
-      if (!rest) return { subdir: "", truncated: false };
-      const parts = rest.split("/");
-      const first = parts[0];
-      const truncated = parts.length > 1;
-      return { subdir: first, truncated };
-    }
-  } catch (_) {
-    // ignore
-  }
-  return { subdir: "", truncated: false };
 }
 
 function showProgressDiv() {
