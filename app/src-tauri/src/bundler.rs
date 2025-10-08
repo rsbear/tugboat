@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tauri::Emitter;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
+use crate::git_url_parser::GitUrl;
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct PackageJson {
@@ -17,6 +18,7 @@ pub struct PackageJson {
 pub async fn bundle_app(
     app_dir: String,
     alias: String,
+    github_url: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     let app_dir = resolve_tilde(&app_dir)?;
@@ -29,7 +31,29 @@ pub async fn bundle_app(
     ensure_tool(&app, "npx", &["--version"]).await?;
 
     // Determine project directory (where package.json lives)
-    let project_dir = find_package_json_dir(&app_dir)?;
+    // Prefer a subdirectory derived from github_url if provided
+    let hinted_dir: PathBuf = if let Some(url) = github_url.clone() {
+        match GitUrl::parse_https(&url) {
+            Ok(parsed) => {
+                if let Some(sub) = parsed.subpath() {
+                    app_dir.join(sub)
+                } else {
+                    app_dir.clone()
+                }
+            }
+            Err(_) => app_dir.clone(),
+        }
+    } else {
+        app_dir.clone()
+    };
+
+    let project_dir = if hinted_dir.join("package.json").exists() {
+        hinted_dir
+    } else {
+        // Fallback to legacy discovery (root or one-level nested)
+        find_package_json_dir(&app_dir)?
+    };
+
     emit(&app, format!("📦 package.json found at {}", project_dir.display()));
 
     // Install deps

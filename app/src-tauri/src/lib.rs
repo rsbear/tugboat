@@ -2,6 +2,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use crate::git_url_parser::GitUrl;
 
 pub mod kv;
 pub mod bundler;
@@ -15,12 +16,33 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
+fn parse_github_url(github_url: String) -> Result<serde_json::Value, String> {
+    let parsed = GitUrl::parse_https(&github_url)?;
+    let obj = serde_json::json!({
+        "owner": parsed.owner(),
+        "repo": parsed.repo(),
+        "branch": parsed.branch(),
+        "subpath": parsed.subpath(),
+        "https_base_url": parsed.https_base_url(),
+        "ssh_url": parsed.ssh_url(),
+    });
+    Ok(obj)
+}
+
+#[tauri::command]
 async fn clone_repo(
     github_url: String,
     dir_path: String,
+    #[allow(non_snake_case)] gitProtocol: String,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    
+    // Parse the GitHub URL (HTTPS forms)
+    let parsed = GitUrl::parse_https(&github_url)?;
+
+    // Choose clone URL based on explicit protocol argument
+    let proto = gitProtocol.to_lowercase();
+    let clone_url = if proto == "ssh" { parsed.ssh_url() } else { parsed.https_base_url() };
+
     // Resolve ~ to home directory
     let resolved_path = if dir_path.starts_with("~/") {
         let home = dirs::home_dir().ok_or("Could not find home directory")?;
@@ -31,8 +53,12 @@ async fn clone_repo(
         std::path::PathBuf::from(&dir_path)
     };
 
-    // Determine final target directory (github_url parsing removed; use resolved_path as-is)
-    let target_dir = resolved_path;
+    // If the path is a tugboat_apps directory, put the clone in a subdir named after the repo
+    let target_dir = if resolved_path.file_name().and_then(|n| n.to_str()) == Some("tugboat_apps") {
+        resolved_path.join(parsed.repo())
+    } else {
+        resolved_path
+    };
 
     // Check if repository already exists (look for .git directory)
     if target_dir.join(".git").exists() {
@@ -51,23 +77,41 @@ async fn clone_repo(
             .map_err(|e| format!("❌ Failed to create directory {}: {}", parent.display(), e))?;
     }
 
-    // Run git clone using provided URL (no parsing/transformation)
-    run_git_clone(github_url, target_dir.to_string_lossy().to_string(), app).await
+    // Run git clone using the computed clone URL
+    run_git_clone(clone_url, target_dir.to_string_lossy().to_string(), app).await
 }
 
-async fn get_git_protocol_preference() -> Result<String, String> {
-    // Get preferences from KV store
-    let prefs_key = vec!["preferences".to_string(), "user".to_string()];
-    match kv::kv_get(prefs_key).await {
-        Ok(Some(item)) => {
-            let git_protocol = item.value.get("git_protocol")
-                .and_then(|p| p.as_str())
-                .unwrap_or("https");
-            Ok(git_protocol.to_string())
-        },
-        _ => Ok("https".to_string()) // Default to HTTPS
+#[tauri::command]
+async fn clone_app(
+    github_url: String,
+    #[allow(non_snake_case)] gitProtocol: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    // Parse the GitHub URL (HTTPS forms)
+    let parsed = GitUrl::parse_https(&github_url)?;
+
+    // Choose clone URL based on explicit protocol argument
+    let proto = gitProtocol.to_lowercase();
+    let clone_url = if proto == "ssh" { parsed.ssh_url() } else { parsed.https_base_url() };
+
+    // Always clone into ~/.tugboat/tmp/<repo>
+    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+    let base_tmp = home.join(".tugboat").join("tmp");
+    std::fs::create_dir_all(&base_tmp)
+        .map_err(|e| format!("❌ Failed to create temp directory {}: {}", base_tmp.display(), e))?;
+    let target_dir = base_tmp.join(parsed.repo());
+
+    // If repository already exists, treat as success
+    if target_dir.join(".git").exists() {
+        let message = format!("✅ Repository already exists at: {}", target_dir.display());
+        let _ = app.emit("tugboats://clone-progress", &message);
+        return Ok(());
     }
+
+    // Run git clone
+    run_git_clone(clone_url, target_dir.to_string_lossy().to_string(), app).await
 }
+
 
 
 
@@ -153,7 +197,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            parse_github_url,
             clone_repo,
+            clone_app,
             bundler::bundle_app,
             bundler::latest_bundle_for_alias,
             bundler::read_text_file,

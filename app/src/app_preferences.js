@@ -107,20 +107,23 @@ async function initPreferences() {
       await prefsKV.set(["user"], parsed);
       console.log("Preferences saved:", parsed);
 
+      // Determine git protocol from preferences (fallback to https)
+      const gitProtocol = (parsed?.tugboat?.git_protocol || "https");
+
       // Handle repository cloning for 'clones'
       if (parsed.clones && Array.isArray(parsed.clones)) {
         showProgressDiv();
         clearProgress();
         addProgressLine("🚀 Starting repository cloning process...");
-        await handleRepositoryCloning(parsed.clones);
+        await handleRepositoryCloning(parsed.clones, gitProtocol);
         addProgressLine("✅ Repository cloning process completed!");
       }
 
-      // Also clone apps into ~/.tugboats/temp, trimming any subpaths in github_url
+      // Also clone apps into ~/.tugboat/tmp, trimming any subpaths in github_url
       if (parsed.apps && Array.isArray(parsed.apps)) {
         showProgressDiv();
-        addProgressLine("\n🚀 Starting apps cloning into ~/.tugboats/temp ...");
-        await handleAppsCloning(parsed.apps);
+        addProgressLine("\n🚀 Starting apps cloning into ~/.tugboat/tmp ...");
+        await handleAppsCloning(parsed.apps, gitProtocol);
         addProgressLine("✅ Apps cloning completed!");
       }
     } catch (err) {
@@ -132,7 +135,7 @@ async function initPreferences() {
   hidePreferences();
 }
 
-async function handleRepositoryCloning(clones) {
+async function handleRepositoryCloning(clones, gitProtocol) {
   // Listen for cloning progress events
   const unlisten = await window.__TAURI__.event.listen(
     "tugboats://clone-progress",
@@ -165,6 +168,7 @@ async function handleRepositoryCloning(clones) {
         await window.__TAURI__.core.invoke("clone_repo", {
           githubUrl: clone.github_url,
           dirPath: dirPath,
+          gitProtocol: gitProtocol || "https",
         });
         addProgressLine(`✅ Completed: ${repoName}`);
       } catch (error) {
@@ -179,7 +183,7 @@ async function handleRepositoryCloning(clones) {
   }
 }
 
-async function handleAppsCloning(apps) {
+async function handleAppsCloning(apps, gitProtocol) {
   // Listen for cloning progress events for apps as well
   const unlisten = await window.__TAURI__.event.listen(
     "tugboats://clone-progress",
@@ -202,11 +206,20 @@ async function handleAppsCloning(apps) {
         continue;
       }
 
-      // Use original URL - let Rust backend handle all transformations
-      const repoName = extractRepoNameFromUrl(app.github_url);
+      // Parse with backend parser to normalize repo name and subpath consistently
+      let parsedInfo;
+      try {
+        parsedInfo = await window.__TAURI__.core.invoke("parse_github_url", {
+          githubUrl: app.github_url,
+        });
+      } catch (e) {
+        addProgressLine(`❌ Failed to parse app URL: ${e}`);
+        continue;
+      }
+      const repoName = parsedInfo.repo;
 
-      // Hardcode destination to ~/.tugboats/temp/<repoName>
-      const repoRootDir = `~/.tugboats/temp/${repoName}`;
+      // Destination is always ~/.tugboat/tmp/<repoName>
+      const repoRootDir = `~/.tugboat/tmp/${repoName}`;
 
       addProgressLine(
         `\n[${i + 1}/${apps.length}] Processing app: ${repoName}`,
@@ -214,9 +227,9 @@ async function handleAppsCloning(apps) {
       addProgressLine(`📂 Repo clone target: ${repoRootDir}`);
 
       try {
-        await window.__TAURI__.core.invoke("clone_repo", {
-          githubUrl: app.github_url, // Pass original URL, let backend handle protocol transformation
-          dirPath: repoRootDir,
+        await window.__TAURI__.core.invoke("clone_app", {
+          githubUrl: app.github_url,
+          gitProtocol: gitProtocol || "https",
         });
         addProgressLine(`✅ Completed app clone: ${repoName}`);
 
@@ -224,8 +237,9 @@ async function handleAppsCloning(apps) {
         addProgressLine(`🛠️ Bundling app at ${repoRootDir} ...`);
         const bundleAlias = app.alias || repoName;
         const bundlePath = await window.__TAURI__.core.invoke("bundle_app", {
-          appDir: repoRootDir, // Let bundler determine the correct subdirectory
+          appDir: repoRootDir, // Backend will use githubUrl subpath to select correct subdirectory
           alias: bundleAlias,
+          githubUrl: app.github_url,
         });
         addProgressLine(`📦 Bundle ready: ${bundlePath}`);
       } catch (error) {

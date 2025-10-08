@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 
 use crate::bundler;
+use crate::git_url_parser::GitUrl;
 use crate::kv;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +120,10 @@ impl DevModeManager {
                 let github_url = clone.get("github_url")
                     .and_then(|u| u.as_str())
                     .ok_or_else(|| "Missing github_url for clone".to_string())?;
+
+                // Parse to get repo name and potential subpath for dev mode
+                let parsed = GitUrl::parse_https(github_url)
+                    .map_err(|e| format!("Invalid github_url for clone '{}': {}", alias, e))?;
                 
                 let dir = clone.get("dir")
                     .and_then(|d| d.as_str())
@@ -134,12 +139,19 @@ impl DevModeManager {
                     PathBuf::from(dir)
                 };
 
-                // Build full path without relying on github_url parsing
-                let full_clone_path = resolved_dir;
+                // Build full path: if base dir is tugboat_apps, append repo name
+                let full_clone_path = if resolved_dir.file_name().and_then(|n| n.to_str()) == Some("tugboat_apps") {
+                    resolved_dir.join(parsed.repo())
+                } else {
+                    resolved_dir.clone()
+                };
 
-                // For apps, we need to determine the actual app directory
-                // This might be a subdirectory if the URL had /tree/branch/subdir
-                let app_dir = self.resolve_app_directory(&full_clone_path, github_url).await?;
+                // Determine the actual app directory: if subpath exists, point watcher there
+                let app_dir = if let Some(sub) = parsed.subpath() {
+                    full_clone_path.join(sub)
+                } else {
+                    full_clone_path.clone()
+                };
                 
                 return Ok((full_clone_path, app_dir));
             }
@@ -148,9 +160,18 @@ impl DevModeManager {
         Err(format!("Clone alias '{}' not found in preferences", alias))
     }
 
-    async fn resolve_app_directory(&self, clone_path: &Path, _github_url: &str) -> Result<PathBuf, String> {
-        // github_url parsing removed; always use clone root
-        Ok(clone_path.to_path_buf())
+    async fn resolve_app_directory(&self, clone_path: &Path, github_url: &str) -> Result<PathBuf, String> {
+        // Use parser: if a subpath exists, use it; otherwise use clone root
+        match GitUrl::parse_https(github_url) {
+            Ok(parsed) => {
+                if let Some(sub) = parsed.subpath() {
+                    Ok(clone_path.join(sub))
+                } else {
+                    Ok(clone_path.to_path_buf())
+                }
+            }
+            Err(_) => Ok(clone_path.to_path_buf()),
+        }
     }
 
     pub async fn start_dev_mode(&self, alias: String) -> Result<(), String> {
@@ -371,6 +392,7 @@ impl DevModeManager {
         match bundler::bundle_app(
             app_dir.to_string_lossy().to_string(),
             session_alias,
+            None,
             self.app_handle.clone(),
         ).await {
             Ok(bundle_path) => {
