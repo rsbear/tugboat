@@ -88,6 +88,17 @@ async function initPreferences() {
   saveBtn.textContent = "Save Preferences";
   saveBtn.style.marginTop = "8px";
   container.appendChild(saveBtn);
+  
+  // Dev mode info
+  const devModeInfo = document.createElement("div");
+  devModeInfo.style.marginTop = "8px";
+  devModeInfo.style.fontSize = "12px";
+  devModeInfo.style.color = "#64748b";
+  devModeInfo.innerHTML = `
+    <strong>Dev Mode:</strong> Type <code>alias:dev</code> to activate live development mode for any clone alias.
+    <br>Example: <code>myapp:dev</code> will watch for changes and auto-rebuild.
+  `;
+  container.appendChild(devModeInfo);
 
   saveBtn.addEventListener("click", async () => {
     const tomlCode = editor.getValue();

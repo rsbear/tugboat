@@ -16,7 +16,6 @@ In the case above, 'websearch' is the tugboat application alias 'risotto recipes
 ### Repo structure
 ```bash
 .
-├── _test_apps
 ├── app
 │   ├── deno.json
 │   ├── deno.lock
@@ -46,6 +45,7 @@ In the case above, 'websearch' is the tugboat application alias 'risotto recipes
 │       │       ├── desktop-schema.json
 │       │       └── macOS-schema.json
 │       ├── src
+│       │   ├── bundler.rs
 │       │   ├── kv
 │       │   │   ├── client.rs
 │       │   │   ├── commands.rs
@@ -54,6 +54,8 @@ In the case above, 'websearch' is the tugboat application alias 'risotto recipes
 │       │   ├── lib.rs
 │       │   └── main.rs
 │       └── tauri.conf.json
+├── DEV_MODE.md
+├── docs
 ├── justfile
 ├── pkgs
 │   ├── core
@@ -68,9 +70,25 @@ In the case above, 'websearch' is the tugboat application alias 'risotto recipes
 │   └── react
 │       └── package.json
 ├── README.md
-└── TASK.md
+├── TASK.md
+├── test_mini_react
+│   ├── bun-env.d.ts
+│   ├── bun.lock
+│   ├── bunfig.toml
+│   ├── package.json
+│   ├── README.md
+│   ├── tsconfig.json
+│   └── tugboats.tsx
+├── test_mini_svelte
+│   ├── App.svelte
+│   ├── bun.lock
+│   ├── package.json
+│   ├── README.md
+│   ├── tsconfig.json
+│   └── tugboats.ts
+└── WARP.md
 
-16 directories, 38 files
+18 directories, 54 files
 ```
 
 ## Tugboat apps overview

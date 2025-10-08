@@ -15,6 +15,7 @@
             }
         </script>
         <script type="module" src="/app_input.js" defer></script>
+        <script type="module" src="/app_devmode.js" defer></script>
     </head>
 
     <body>
@@ -34,6 +35,9 @@
             <button id="list-impltest">ListImplTest</button>
 
             <div id="tugboats-slot"></div>
+            
+            <!-- Dev mode progress area -->
+            <div id="clone-progress" style="display:none; background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; margin: 16px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
 
             <!-- Monaco editor target -->
             <div

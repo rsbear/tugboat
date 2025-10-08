@@ -1,10 +1,11 @@
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 pub mod kv;
 pub mod bundler;
+pub mod devmode;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -178,6 +179,10 @@ pub fn run() {
             bundler::bundle_app,
             bundler::latest_bundle_for_alias,
             bundler::read_text_file,
+            // --- Dev Mode Commands ---
+            devmode::dev_mode_start,
+            devmode::dev_mode_stop,
+            devmode::dev_mode_status,
             // --- KV Commands ---
             kv::kv_factory_reset,
             kv::kv_get,
@@ -195,6 +200,10 @@ pub fn run() {
                     eprintln!("Failed to initialize KV database: {}", e);
                 }
             });
+
+            // Initialize dev mode manager
+            let devmode_manager = devmode::DevModeManager::new(app.handle().clone());
+            app.manage(devmode_manager);
 
             // Use ~/.tugboats as the custom data directory
             let home = dirs::home_dir().expect("No home directory found");
