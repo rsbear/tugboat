@@ -9,9 +9,11 @@ We extended the existing cloning feature to handle apps declared in `preferences
 ## What we implemented
 
 - Apps cloning
-  - Parse `preferences.apps[]` and clone each app’s repository into `~/.tugboats/temp/<repo>`.
-  - Normalize GitHub URLs to strip sub-paths so `git clone` works (e.g., `.../tree/main/...` is trimmed to `https://github.com/<owner>/<repo>` before cloning).
-  - Support one-level nested app directories in the repo (e.g., `.../tree/main/mini-svelte-ts`).
+  - Parse `preferences.apps[]` and clone each app's repository into `~/.tugboats/temp/<repo>`.
+  - Normalize GitHub URLs to strip sub-paths so `git clone` works:
+    - HTTPS: `.../tree/main/...` is trimmed to `https://github.com/<owner>/<repo>`
+    - SSH: `git@github.com:<owner>/<repo>.git/tree/main/...` is trimmed to `git@github.com:<owner>/<repo>.git`
+  - Support one-level nested app directories in both HTTPS and SSH URL formats.
   - Skip-if-exists behavior via backend check for `.git`.
   - Progress logging via Tauri events (`tugboats://clone-progress`).
 
@@ -119,7 +121,9 @@ We extended the existing cloning feature to handle apps declared in `preferences
 1. Build and run the app:
    - `just dev`
    - or `cd app && deno task tauri dev`
-2. Open preferences (type `prefs` or `preferences`) and ensure your `apps` entries point to GitHub repos. URLs with `/tree/<branch>/<subdir>` are supported (one level deep).
+2. Open preferences (type `prefs` or `preferences`) and ensure your `apps` entries point to GitHub repos. URLs with `/tree/<branch>/<subdir>` are supported (one level deep) for both HTTPS and SSH formats:
+   - HTTPS: `https://github.com/owner/repo/tree/main/subdir`
+   - SSH: `git@github.com:owner/repo.git/tree/main/subdir` (for private repos)
 3. Save preferences. Watch the progress area for cloning and bundling logs. Bundles will appear in `~/.tugboats/bundles` as `<alias>-<timestamp>.js`.
 4. Type the alias in the main input. The app should mount live (without pressing Enter) into the `#tugboats-slot`.
 5. Switch aliases to verify unmount/remount behavior.

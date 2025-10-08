@@ -31,6 +31,10 @@ function getDefaultToml() {
         alias: "no",
         github_url: app_repo_url_svelte,
       },
+      {
+        alias: "private",
+        github_url: "git@github.com:rsbear/tugboat.git/tree/main/test_mini_react",
+      },
     ],
     clones: [
       {
@@ -250,11 +254,14 @@ function trimGithubUrlToRepo(url) {
       return `https://github.com/${owner}/${repo}`;
     }
 
-    // Handle SSH URLs like git@github.com:user/repo(.git)(/...)
-    const sshMatch = url.match(/^git@github\.com:([^\/]+)\/([^\s]+)$/);
+    // Handle SSH URLs like git@github.com:user/repo(.git)(/tree/branch/path...)
+    const sshMatch = url.match(/^git@github\.com:([^\/]+)\/([^\/\s]+)(?:\/.*)?$/);
     if (sshMatch) {
       const owner = sshMatch[1];
-      const repo = sshMatch[2].replace(/\.git$/, "").split("/")[0];
+      let repo = sshMatch[2];
+      
+      // Remove .git suffix if present, but ensure we add it back for consistency
+      repo = repo.replace(/\.git$/, "");
       return `git@github.com:${owner}/${repo}.git`;
     }
   } catch (_) {
@@ -265,11 +272,24 @@ function trimGithubUrlToRepo(url) {
 
 // Parse the first-level subdirectory (if any) from a GitHub URL of the form
 // https://github.com/<owner>/<repo>/tree/<branch>/<subdir>(/ ...)
+// or git@github.com:<owner>/<repo>.git/tree/<branch>/<subdir>(/ ...)
 function parseGithubFirstSubdir(url) {
   try {
-    const m = url.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/tree\/[^/]+\/(.+)$/);
-    if (m) {
-      const rest = m[1].replace(/\/+$/, "");
+    // Handle HTTPS URLs
+    const httpsMatch = url.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/tree\/[^/]+\/(.+)$/);
+    if (httpsMatch) {
+      const rest = httpsMatch[1].replace(/\/+$/, "");
+      if (!rest) return { subdir: "", truncated: false };
+      const parts = rest.split("/");
+      const first = parts[0];
+      const truncated = parts.length > 1;
+      return { subdir: first, truncated };
+    }
+
+    // Handle SSH URLs with tree notation like git@github.com:user/repo.git/tree/branch/subdir
+    const sshMatch = url.match(/^git@github\.com:[^/]+\/[^/]+(?:\.git)?\/tree\/[^/]+\/(.+)$/);
+    if (sshMatch) {
+      const rest = sshMatch[1].replace(/\/+$/, "");
       if (!rest) return { subdir: "", truncated: false };
       const parts = rest.split("/");
       const first = parts[0];
