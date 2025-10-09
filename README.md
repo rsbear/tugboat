@@ -134,6 +134,12 @@ export function tugboatReact(domNode: HTMLElement) {
 import { mount } from "svelte";
 import App from './App.svelte'
 export function tugboatSvelte(domNode: HTMLElement) {
-	mount(App, { target, props: { hello: "world" } });
+    mount(App, { target, props: { hello: "world" } });
 }
 ```
+
+## Licenses
+
+This project is dual-licensed under MIT OR Apache-2.0.
+- See LICENSE-MIT and LICENSE-APACHE at the repository root.
+- See NOTICE for attribution requirements.

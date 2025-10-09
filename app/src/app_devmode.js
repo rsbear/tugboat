@@ -30,8 +30,8 @@ export function parseDevCommand(raw) {
   const s = (raw || "").trim();
   if (!s) return null;
   
-  // Match pattern: <alias>:dev
-  const match = s.match(/^(\w+):dev$/);
+  // Match pattern: <alias>:dev (allow letters, numbers, underscore, hyphen, dot)
+  const match = s.match(/^([A-Za-z0-9._-]+):dev$/);
   if (match) {
     return { alias: match[1], command: "dev" };
   }

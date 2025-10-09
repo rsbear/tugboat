@@ -56,8 +56,14 @@ pub async fn bundle_app(
 
     emit(&app, format!("📦 package.json found at {}", project_dir.display()));
 
-    // Install deps
-    run(&app, "npm", &["install"], Some(&project_dir)).await?;
+    // Install deps (first build only). If node_modules exists, skip install to avoid
+    // unnecessary churn that would retrigger the file watcher.
+    let node_modules = project_dir.join("node_modules");
+    if !node_modules.exists() {
+        run(&app, "npm", &["install"], Some(&project_dir)).await?;
+    } else {
+        emit(&app, "⏭️  Skipping npm install (node_modules present)".to_string());
+    }
 
     // Load package.json for framework detection
     let pkg = read_package_json(&project_dir).await?;

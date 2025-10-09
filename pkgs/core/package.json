@@ -1,6 +1,7 @@
 {
   "name": "@tugboats/core",
   "version": "0.0.10",
+  "license": "(MIT OR Apache-2.0)",
   "type": "module",
   "scripts": {
     "build": "tsup"

@@ -192,6 +192,16 @@ impl DevModeManager {
             return Err(format!("Clone directory not found: {}", watch_path.display()));
         }
 
+        // Validate tugboat app entrypoint immediately (tugboats.ts or tugboats.tsx in root or src/)
+        if !has_tugboat_entry(&app_dir) {
+            let msg = format!(
+                "Not a tugboat app: no tugboats.ts or tugboats.tsx in {}",
+                app_dir.display()
+            );
+            self.emit_status(&alias, "error", &msg, Some(&app_dir));
+            return Err(msg);
+        }
+
         self.emit_status(&alias, "starting", "Setting up file watcher...", Some(&watch_path));
 
         // Create session
@@ -383,6 +393,17 @@ impl DevModeManager {
             (session.app_dir.clone(), session.alias.clone())
         };
 
+        // Guard again: if entry is missing, report and stop
+        if !has_tugboat_entry(&app_dir) {
+            let msg = format!(
+                "Not a tugboat app: no tugboats.ts or tugboats.tsx in {}",
+                app_dir.display()
+            );
+            self.emit_build_log(alias, "error", &msg);
+            self.emit_status(alias, "error", &msg, Some(&app_dir));
+            return Err(msg);
+        }
+
         self.emit_status(alias, "building", "Starting build...", None);
         self.emit_build_log(alias, "info", "🚧 Starting dev mode build...");
 
@@ -446,6 +467,19 @@ pub async fn dev_mode_status(
     manager.get_active_sessions().await
 }
 
+// Helper: presence of tugboats entrypoint in root or src/
+fn has_tugboat_entry(app_dir: &Path) -> bool {
+    let candidates = [
+        "tugboats.ts",
+        "tugboats.tsx",
+        "src/tugboats.ts",
+        "src/tugboats.tsx",
+    ];
+    candidates
+        .iter()
+        .any(|c| app_dir.join(c).exists())
+}
+
 // Helper functions
 fn is_relevant_file_change(event: &Event) -> bool {
     match &event.kind {
@@ -453,15 +487,22 @@ fn is_relevant_file_change(event: &Event) -> bool {
             event.paths.iter().any(|path| {
                 let path_str = path.to_string_lossy().to_lowercase();
                 
-                // Skip irrelevant directories/files
+                // Skip irrelevant directories/files and build artifacts
                 if path_str.contains("node_modules") ||
                    path_str.contains(".git") ||
                    path_str.contains(".tugboats-dist") ||
                    path_str.contains("target") ||
-                   path_str.contains(".DS_Store") ||
+                   path_str.contains(".ds_store") ||
                    path_str.ends_with("~") ||
                    path_str.contains(".tmp") ||
-                   path_str.contains(".cache") {
+                   path_str.contains(".cache") ||
+                   // Skip lockfiles and generated configs that bundling touches
+                   path_str.ends_with("package-lock.json") ||
+                   path_str.ends_with("yarn.lock") ||
+                   path_str.ends_with("pnpm-lock.yaml") ||
+                   path_str.ends_with("bun.lock") ||
+                   path_str.ends_with("vite.config.mjs") ||
+                   path_str.ends_with("svelte.config.mjs") {
                     return false;
                 }
 
