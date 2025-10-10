@@ -1,6 +1,10 @@
 import { input, kvTable } from "@tugboats/core";
 import { handlePreferencesTrigger } from "./app_preferences.js";
-import { handleDevMode, parseDevCommand, getDevModeState } from "./app_devmode.js";
+import {
+  getDevModeState,
+  handleDevMode,
+  parseDevCommand,
+} from "./app_devmode.js";
 
 const { invoke } = window.__TAURI__.core;
 
@@ -43,7 +47,9 @@ async function mountTugboatForAlias(alias) {
 
   // Unmount previous (best-effort)
   if (currentMounted.cleanup) {
-    try { currentMounted.cleanup(); } catch {}
+    try {
+      currentMounted.cleanup();
+    } catch {}
   }
   currentMounted.cleanup = null;
   currentMounted.alias = null;
@@ -65,7 +71,11 @@ async function mountTugboatForAlias(alias) {
       // Harbor-style exports
       mod.harborMount(slot);
       if (typeof mod.unmount === "function") {
-        cleanup = () => { try { mod.unmount(); } catch {} };
+        cleanup = () => {
+          try {
+            mod.unmount();
+          } catch {}
+        };
       }
     } else if (mod && typeof mod.tugboatReact === "function") {
       const res = mod.tugboatReact(slot);
@@ -77,7 +87,10 @@ async function mountTugboatForAlias(alias) {
       const res = mod.default(slot);
       if (typeof res === "function") cleanup = res;
     } else {
-      console.warn("No recognized tugboat/harbor mount export found in bundle for alias:", alias);
+      console.warn(
+        "No recognized tugboat/harbor mount export found in bundle for alias:",
+        alias,
+      );
     }
 
     currentMounted = { alias, cleanup };
@@ -101,9 +114,8 @@ async function listInputSubmissions() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  greetInputEl = document.querySelector("#greet-input");
+  greetInputEl = document.querySelector("#the-input");
   greetMsgEl = document.querySelector("#greet-msg");
-  listBtnEl = document.querySelector("#list-impltest");
   tugboatsSlot = document.querySelector("#tugboats-slot");
 
   await refreshPreferencesAliasMap();
@@ -114,7 +126,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   input.subscribe(async (s) => {
     handlePreferencesTrigger(s.raw);
-    
+
     // Handle dev mode commands first
     const devCommand = parseDevCommand(s.raw);
     if (devCommand) {
@@ -123,13 +135,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       console.log("Dev mode command processed:", s.raw);
       return;
     }
-    
+
     // If not a dev command but dev mode is active, stop it
     const devState = getDevModeState();
     if (devState.isActive) {
       await handleDevMode(""); // This will stop dev mode
     }
-    
+
     const alias = parseAlias(s.raw);
 
     // Refresh alias map opportunistically when alias token changes
@@ -141,7 +153,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       // If current mount is not represented by alias anymore, clear
       if (currentMounted.alias) {
         if (currentMounted.cleanup) {
-          try { currentMounted.cleanup(); } catch {}
+          try {
+            currentMounted.cleanup();
+          } catch {}
         }
         currentMounted.cleanup = null;
         currentMounted.alias = null;
@@ -152,17 +166,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     console.log("Input updated:", s.raw);
   });
 
-  document.querySelector("#greet-form").addEventListener("submit", (e) => {
+  document.querySelector("#the-input-form").addEventListener("submit", (e) => {
     e.preventDefault();
     greet();
   });
 
-  listBtnEl.addEventListener("click", listInputSubmissions);
-  
   // Listen for dev mode remount events
   document.addEventListener("tugboats-dev-remount", async (event) => {
     const { alias, bundlePath } = event.detail;
-    
+
     // Only remount if this is the current dev mode alias
     const devState = getDevModeState();
     if (devState.isActive && devState.currentAlias === alias) {
