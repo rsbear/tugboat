@@ -4,6 +4,8 @@ import {
   getDevModeState,
   handleDevMode,
   parseDevCommand,
+  startDevModeForAlias,
+  stopDevMode,
 } from "./app_devmode.js";
 
 const { invoke } = window.__TAURI__.core;
@@ -16,7 +18,8 @@ let tugboatsSlot;
 const inputSubmissions = kvTable("InputSubmissions");
 const prefsKV = kvTable("preferences");
 
-let aliasMap = new Map(); // alias -> true (or metadata later)
+let appAliasMap = new Map(); // apps alias -> true
+let cloneAliasSet = new Set(); // clone aliases
 let currentMounted = { alias: null, cleanup: null };
 
 async function refreshPreferencesAliasMap() {
@@ -30,7 +33,21 @@ async function refreshPreferencesAliasMap() {
       }
     }
   }
-  aliasMap = m;
+  appAliasMap = m;
+}
+
+async function refreshCloneAliasSet() {
+  const stored = await prefsKV.get(["user"]);
+  const s = new Set();
+  if (stored._tag === "Ok") {
+    const prefs = stored.result.value;
+    if (prefs && Array.isArray(prefs.clones)) {
+      for (const c of prefs.clones) {
+        if (c && c.alias) s.add(c.alias.trim());
+      }
+    }
+  }
+  cloneAliasSet = s;
 }
 
 function parseAlias(raw) {
@@ -119,6 +136,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   tugboatsSlot = document.querySelector("#tugboats-slot");
 
   await refreshPreferencesAliasMap();
+  await refreshCloneAliasSet();
 
   greetInputEl.addEventListener("input", (e) => {
     input.set(e.target.value);
@@ -131,23 +149,29 @@ window.addEventListener("DOMContentLoaded", async () => {
     const devCommand = parseDevCommand(s.raw);
     if (devCommand) {
       await handleDevMode(s.raw);
-      // Don't process as regular alias when in dev mode
       console.log("Dev mode command processed:", s.raw);
       return;
     }
 
-    // If not a dev command but dev mode is active, stop it
-    const devState = getDevModeState();
-    if (devState.isActive) {
-      await handleDevMode(""); // This will stop dev mode
-    }
-
     const alias = parseAlias(s.raw);
 
-    // Refresh alias map opportunistically when alias token changes
+    // Refresh maps opportunistically
     await refreshPreferencesAliasMap();
+    await refreshCloneAliasSet();
 
-    if (alias && aliasMap.has(alias)) {
+    // Auto dev: if alias is a clone alias, start dev mode
+    if (alias && cloneAliasSet.has(alias)) {
+      await startDevModeForAlias(alias);
+      return;
+    }
+
+    // Not a clone alias: if dev mode is active, stop it
+    const devState = getDevModeState();
+    if (devState.isActive) {
+      await stopDevMode();
+    }
+
+    if (alias && appAliasMap.has(alias)) {
       await mountTugboatForAlias(alias);
     } else {
       // If current mount is not represented by alias anymore, clear

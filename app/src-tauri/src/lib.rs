@@ -5,7 +5,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 pub mod bundler;
-pub mod devmode;
+pub mod devserver;
 pub mod git_url_parser;
 pub mod kv;
 
@@ -212,10 +212,10 @@ pub fn run() {
             bundler::bundle_app,
             bundler::latest_bundle_for_alias,
             bundler::read_text_file,
-            // --- Dev Mode Commands ---
-            devmode::dev_mode_start,
-            devmode::dev_mode_stop,
-            devmode::dev_mode_status,
+            // --- Dev Server Commands ---
+            devserver::start_dev,
+            devserver::stop_dev,
+            devserver::dev_status,
             // --- KV Commands ---
             kv::kv_factory_reset,
             kv::kv_get,
@@ -234,9 +234,9 @@ pub fn run() {
                 }
             });
 
-            // Initialize dev mode manager
-            let devmode_manager = devmode::DevModeManager::new(app.handle().clone());
-            app.manage(devmode_manager);
+            // Initialize dev server manager
+            let dev_manager = devserver::DevServerManager::new(app.handle().clone());
+            app.manage(dev_manager);
 
             // Use ~/.tugboats as the custom data directory
             let home = dirs::home_dir().expect("No home directory found");
