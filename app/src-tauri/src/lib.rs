@@ -1,13 +1,13 @@
+use crate::git_url_parser::GitUrl;
 use tauri::{Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use crate::git_url_parser::GitUrl;
 
-pub mod kv;
 pub mod bundler;
 pub mod devmode;
 pub mod git_url_parser;
+pub mod kv;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -41,7 +41,11 @@ async fn clone_repo(
 
     // Choose clone URL based on explicit protocol argument
     let proto = gitProtocol.to_lowercase();
-    let clone_url = if proto == "ssh" { parsed.ssh_url() } else { parsed.https_base_url() };
+    let clone_url = if proto == "ssh" {
+        parsed.ssh_url()
+    } else {
+        parsed.https_base_url()
+    };
 
     // Resolve ~ to home directory
     let resolved_path = if dir_path.starts_with("~/") {
@@ -92,13 +96,22 @@ async fn clone_app(
 
     // Choose clone URL based on explicit protocol argument
     let proto = gitProtocol.to_lowercase();
-    let clone_url = if proto == "ssh" { parsed.ssh_url() } else { parsed.https_base_url() };
+    let clone_url = if proto == "ssh" {
+        parsed.ssh_url()
+    } else {
+        parsed.https_base_url()
+    };
 
-    // Always clone into ~/.tugboat/tmp/<repo>
+    // Always clone into ~/.tugboats/tmp/<repo>
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
-    let base_tmp = home.join(".tugboat").join("tmp");
-    std::fs::create_dir_all(&base_tmp)
-        .map_err(|e| format!("❌ Failed to create temp directory {}: {}", base_tmp.display(), e))?;
+    let base_tmp = home.join(".tugboats").join("tmp");
+    std::fs::create_dir_all(&base_tmp).map_err(|e| {
+        format!(
+            "❌ Failed to create temp directory {}: {}",
+            base_tmp.display(),
+            e
+        )
+    })?;
     let target_dir = base_tmp.join(parsed.repo());
 
     // If repository already exists, treat as success
@@ -111,10 +124,6 @@ async fn clone_app(
     // Run git clone
     run_git_clone(clone_url, target_dir.to_string_lossy().to_string(), app).await
 }
-
-
-
-
 
 async fn run_git_clone(
     github_url: String,

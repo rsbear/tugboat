@@ -108,7 +108,7 @@ async function initPreferences() {
       console.log("Preferences saved:", parsed);
 
       // Determine git protocol from preferences (fallback to https)
-      const gitProtocol = (parsed?.tugboat?.git_protocol || "https");
+      const gitProtocol = parsed?.tugboat?.git_protocol || "https";
 
       // Handle repository cloning for 'clones'
       if (parsed.clones && Array.isArray(parsed.clones)) {
@@ -122,7 +122,7 @@ async function initPreferences() {
       // Also clone apps into ~/.tugboat/tmp, trimming any subpaths in github_url
       if (parsed.apps && Array.isArray(parsed.apps)) {
         showProgressDiv();
-        addProgressLine("\n🚀 Starting apps cloning into ~/.tugboat/tmp ...");
+        addProgressLine("\n🚀 Starting apps cloning into ~/.tugboats/tmp ...");
         await handleAppsCloning(parsed.apps, gitProtocol);
         addProgressLine("✅ Apps cloning completed!");
       }
@@ -219,7 +219,7 @@ async function handleAppsCloning(apps, gitProtocol) {
       const repoName = parsedInfo.repo;
 
       // Destination is always ~/.tugboat/tmp/<repoName>
-      const repoRootDir = `~/.tugboat/tmp/${repoName}`;
+      const repoRootDir = `~/.tugboats/tmp/${repoName}`;
 
       addProgressLine(
         `\n[${i + 1}/${apps.length}] Processing app: ${repoName}`,
