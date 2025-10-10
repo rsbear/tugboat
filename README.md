@@ -7,89 +7,22 @@ Take the following example input: websearch risotto recipes
 In the case above, 'websearch' is the tugboat application alias 'risotto recipes' is the query. The input is broken into 2 parts - first word is the application alias, second part is the query. A space character is used to separate the two parts.
 
 ### Features
-- Leverages Vite to build to build tugboat apps so developers don't have to worry about bundling (TODO)
-- Configure the host via TOML (TODO)
-- Alias applications to github URLs (TODO)
-- Download and build applications from GitHub URLs (TODO)
+- [x] Configure the host via TOML
+- [x] Host bundles apps from GitHub URLs via Vite
+- [ ] Host automatically starts/stops a Vite dev instance for clone aliases
 
+### Tugboat Preferences Docs (INCOMPLETE)
+**tugboat** (base config)
+- `git_protocol`: configures backend to use SSH or HTTPS for git clones
+- `apps`: On save, bundles each tugboat app from the associated `github_url`
+- `clones`: On save, clones repo from associated `github_url` to `dir`
 
-### Repo structure
-```bash
-.
-├── app
-│   ├── deno.json
-│   ├── deno.lock
-│   ├── README.md
-│   ├── src
-│   │   ├── app_input.js
-│   │   ├── app_preferences.js
-│   │   ├── assets
-│   │   │   ├── core
-│   │   │   │   ├── mod.d.ts
-│   │   │   │   ├── mod.js
-│   │   │   │   └── mod.js.map
-│   │   │   ├── javascript.svg
-│   │   │   └── tauri.svg
-│   │   ├── index.html
-│   │   └── styles.css
-│   └── src-tauri
-│       ├── build.rs
-│       ├── capabilities
-│       │   └── default.json
-│       ├── Cargo.lock
-│       ├── Cargo.toml
-│       ├── gen
-│       │   └── schemas
-│       │       ├── acl-manifests.json
-│       │       ├── capabilities.json
-│       │       ├── desktop-schema.json
-│       │       └── macOS-schema.json
-│       ├── src
-│       │   ├── bundler.rs
-│       │   ├── kv
-│       │   │   ├── client.rs
-│       │   │   ├── commands.rs
-│       │   │   ├── mod.rs
-│       │   │   └── types.rs
-│       │   ├── lib.rs
-│       │   └── main.rs
-│       └── tauri.conf.json
-├── DEV_MODE.md
-├── docs
-├── justfile
-├── pkgs
-│   ├── core
-│   │   ├── deno.lock
-│   │   ├── package.json
-│   │   ├── src
-│   │   │   ├── input.ts
-│   │   │   ├── kv.ts
-│   │   │   └── mod.ts
-│   │   ├── tsconfig.json
-│   │   └── tsup.config.ts
-│   └── react
-│       └── package.json
-├── README.md
-├── TASK.md
-├── test_mini_react
-│   ├── bun-env.d.ts
-│   ├── bun.lock
-│   ├── bunfig.toml
-│   ├── package.json
-│   ├── README.md
-│   ├── tsconfig.json
-│   └── tugboats.tsx
-├── test_mini_svelte
-│   ├── App.svelte
-│   ├── bun.lock
-│   ├── package.json
-│   ├── README.md
-│   ├── tsconfig.json
-│   └── tugboats.ts
-└── WARP.md
+**NOTES**
+- `apps` should be thought of as an installation or production version
+- `clones` can be any repo. we lookup if a clone has a `tugboat.ts(x)` file and if it does, we
+auto start/stop a vite dev instance depending the host input value
 
-18 directories, 54 files
-```
+---
 
 ## Tugboat apps overview
 
