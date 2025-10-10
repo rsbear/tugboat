@@ -1,5 +1,12 @@
-use notify::{RecommendedWatcher, Watcher, Event, EventKind, RecursiveMode};
-use serde::{Serialize, Deserialize};
+// DEPRECATING THIS FILE AS IT DOES NOT WORK. DO NOT EDIT.
+// DEPRECATING THIS FILE AS IT DOES NOT WORK. DO NOT EDIT.
+// DEPRECATING THIS FILE AS IT DOES NOT WORK. DO NOT EDIT.
+// DEPRECATING THIS FILE AS IT DOES NOT WORK. DO NOT EDIT.
+// DEPRECATING THIS FILE AS IT DOES NOT WORK. DO NOT EDIT.
+// DEPRECATING THIS FILE AS IT DOES NOT WORK. DO NOT EDIT.
+
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -66,8 +73,10 @@ impl DevModeManager {
             message: message.to_string(),
             watch_path: watch_path.map(|p| p.to_string_lossy().to_string()),
         };
-        
-        let _ = self.app_handle.emit("tugboats://dev-mode-status", &status_event);
+
+        let _ = self
+            .app_handle
+            .emit("tugboats://dev-mode-status", &status_event);
     }
 
     fn emit_build_log(&self, alias: &str, event_type: &str, content: &str) {
@@ -80,8 +89,10 @@ impl DevModeManager {
                 .unwrap_or_default()
                 .as_secs(),
         };
-        
-        let _ = self.app_handle.emit("tugboats://dev-mode-build", &build_event);
+
+        let _ = self
+            .app_handle
+            .emit("tugboats://dev-mode-build", &build_event);
     }
 
     fn emit_ready(&self, alias: &str, bundle_path: &str, build_time_ms: u64) {
@@ -90,45 +101,49 @@ impl DevModeManager {
             bundle_path: bundle_path.to_string(),
             build_time_ms,
         };
-        
-        let _ = self.app_handle.emit("tugboats://dev-mode-ready", &ready_event);
+
+        let _ = self
+            .app_handle
+            .emit("tugboats://dev-mode-ready", &ready_event);
     }
 
     async fn find_clone_directory(&self, alias: &str) -> Result<(PathBuf, PathBuf), String> {
         // Get preferences to find clone directory for alias
         let prefs_key = vec!["preferences".to_string(), "user".to_string()];
-        let prefs_result = kv::kv_get(prefs_key).await
+        let prefs_result = kv::kv_get(prefs_key)
+            .await
             .map_err(|e| format!("Failed to read preferences: {}", e))?;
-        
+
         let prefs_json = match prefs_result {
             Some(item) => item.value,
             None => {
                 return Err("No preferences found".to_string());
             }
         };
-        
-        let clones = prefs_json.get("clones")
+
+        let clones = prefs_json
+            .get("clones")
             .and_then(|c| c.as_array())
             .ok_or_else(|| "No clones array in preferences".to_string())?;
 
         for clone in clones {
-            let clone_alias = clone.get("alias")
-                .and_then(|a| a.as_str())
-                .unwrap_or("");
-            
+            let clone_alias = clone.get("alias").and_then(|a| a.as_str()).unwrap_or("");
+
             if clone_alias == alias {
-                let github_url = clone.get("github_url")
+                let github_url = clone
+                    .get("github_url")
                     .and_then(|u| u.as_str())
                     .ok_or_else(|| "Missing github_url for clone".to_string())?;
 
                 // Parse to get repo name and potential subpath for dev mode
                 let parsed = GitUrl::parse_https(github_url)
                     .map_err(|e| format!("Invalid github_url for clone '{}': {}", alias, e))?;
-                
-                let dir = clone.get("dir")
+
+                let dir = clone
+                    .get("dir")
                     .and_then(|d| d.as_str())
                     .unwrap_or("~/tugboat_apps");
-                
+
                 // Resolve directory path
                 let resolved_dir = if dir.starts_with("~/") {
                     let home = dirs::home_dir().ok_or("Could not find home directory")?;
@@ -140,11 +155,12 @@ impl DevModeManager {
                 };
 
                 // Build full path: if base dir is tugboat_apps, append repo name
-                let full_clone_path = if resolved_dir.file_name().and_then(|n| n.to_str()) == Some("tugboat_apps") {
-                    resolved_dir.join(parsed.repo())
-                } else {
-                    resolved_dir.clone()
-                };
+                let full_clone_path =
+                    if resolved_dir.file_name().and_then(|n| n.to_str()) == Some("tugboat_apps") {
+                        resolved_dir.join(parsed.repo())
+                    } else {
+                        resolved_dir.clone()
+                    };
 
                 // Determine the actual app directory: if subpath exists, point watcher there
                 let app_dir = if let Some(sub) = parsed.subpath() {
@@ -152,7 +168,7 @@ impl DevModeManager {
                 } else {
                     full_clone_path.clone()
                 };
-                
+
                 return Ok((full_clone_path, app_dir));
             }
         }
@@ -160,7 +176,11 @@ impl DevModeManager {
         Err(format!("Clone alias '{}' not found in preferences", alias))
     }
 
-    async fn resolve_app_directory(&self, clone_path: &Path, github_url: &str) -> Result<PathBuf, String> {
+    async fn resolve_app_directory(
+        &self,
+        clone_path: &Path,
+        github_url: &str,
+    ) -> Result<PathBuf, String> {
         // Use parser: if a subpath exists, use it; otherwise use clone root
         match GitUrl::parse_https(github_url) {
             Ok(parsed) => {
@@ -187,9 +207,12 @@ impl DevModeManager {
 
         // Find clone directory for alias
         let (watch_path, app_dir) = self.find_clone_directory(&alias).await?;
-        
+
         if !watch_path.exists() {
-            return Err(format!("Clone directory not found: {}", watch_path.display()));
+            return Err(format!(
+                "Clone directory not found: {}",
+                watch_path.display()
+            ));
         }
 
         // Validate tugboat app entrypoint immediately (tugboats.ts or tugboats.tsx in root or src/)
@@ -202,7 +225,12 @@ impl DevModeManager {
             return Err(msg);
         }
 
-        self.emit_status(&alias, "starting", "Setting up file watcher...", Some(&watch_path));
+        self.emit_status(
+            &alias,
+            "starting",
+            "Setting up file watcher...",
+            Some(&watch_path),
+        );
 
         // Create session
         let session = DevModeSession {
@@ -223,7 +251,12 @@ impl DevModeManager {
         // Setup file watcher
         self.setup_file_watcher().await?;
 
-        self.emit_status(&alias, "active", "Watching for file changes...", Some(&watch_path));
+        self.emit_status(
+            &alias,
+            "active",
+            "Watching for file changes...",
+            Some(&watch_path),
+        );
 
         // Perform initial build
         self.trigger_build(&alias).await?;
@@ -245,7 +278,7 @@ impl DevModeManager {
             }
 
             self.emit_status(&alias, "inactive", "Dev mode stopped", None);
-            
+
             // If no more sessions, stop watcher
             {
                 let sessions = self.sessions.lock().unwrap();
@@ -254,7 +287,7 @@ impl DevModeManager {
                     *watcher = None;
                 }
             }
-            
+
             Ok(())
         } else {
             Err(format!("No active dev mode session for alias: {}", alias))
@@ -278,13 +311,15 @@ impl DevModeManager {
                     eprintln!("Failed to send file event: {}", e);
                 }
             }
-        }).map_err(|e| format!("Failed to create file watcher: {}", e))?;
+        })
+        .map_err(|e| format!("Failed to create file watcher: {}", e))?;
 
         // Add watches for all active sessions
         {
             let sessions_lock = sessions.lock().unwrap();
             for session in sessions_lock.values() {
-                watcher.watch(&session.watch_path, RecursiveMode::Recursive)
+                watcher
+                    .watch(&session.watch_path, RecursiveMode::Recursive)
                     .map_err(|e| format!("Failed to watch directory: {}", e))?;
             }
         }
@@ -322,9 +357,13 @@ impl DevModeManager {
         // Find which session(s) this event affects
         let affected_aliases: Vec<String> = {
             let sessions = self.sessions.lock().unwrap();
-            sessions.iter()
+            sessions
+                .iter()
                 .filter(|(_, session)| {
-                    event.paths.iter().any(|path| path.starts_with(&session.watch_path))
+                    event
+                        .paths
+                        .iter()
+                        .any(|path| path.starts_with(&session.watch_path))
                 })
                 .map(|(alias, _)| alias.clone())
                 .collect()
@@ -358,17 +397,17 @@ impl DevModeManager {
         let sessions_for_task = sessions_arc.clone();
         let app_handle_for_task = app_handle.clone();
         let watcher_for_task = watcher.clone();
-        
+
         // Start new debounced build task
         let handle = tokio::spawn(async move {
             sleep(Duration::from_millis(500)).await;
-            
+
             let manager = DevModeManager {
                 sessions: sessions_for_task,
                 app_handle: app_handle_for_task,
                 watcher: watcher_for_task,
             };
-            
+
             if let Err(e) = manager.trigger_build(&alias_clone).await {
                 eprintln!("Build failed for {}: {}", alias_clone, e);
             }
@@ -388,7 +427,8 @@ impl DevModeManager {
     async fn trigger_build(&self, alias: &str) -> Result<(), String> {
         let (app_dir, session_alias) = {
             let sessions = self.sessions.lock().unwrap();
-            let session = sessions.get(alias)
+            let session = sessions
+                .get(alias)
                 .ok_or_else(|| format!("No session found for alias: {}", alias))?;
             (session.app_dir.clone(), session.alias.clone())
         };
@@ -415,13 +455,23 @@ impl DevModeManager {
             session_alias,
             None,
             self.app_handle.clone(),
-        ).await {
+        )
+        .await
+        {
             Ok(bundle_path) => {
                 let build_time = build_start.elapsed().as_millis() as u64;
-                
-                self.emit_build_log(alias, "info", 
-                    &format!("✅ Build completed in {}ms", build_time));
-                self.emit_status(alias, "active", "Build successful, watching for changes...", None);
+
+                self.emit_build_log(
+                    alias,
+                    "info",
+                    &format!("✅ Build completed in {}ms", build_time),
+                );
+                self.emit_status(
+                    alias,
+                    "active",
+                    "Build successful, watching for changes...",
+                    None,
+                );
                 self.emit_ready(alias, &bundle_path, build_time);
 
                 // Update last build time
@@ -461,9 +511,7 @@ pub async fn dev_mode_stop(
 }
 
 #[tauri::command]
-pub async fn dev_mode_status(
-    manager: State<'_, DevModeManager>,
-) -> Result<Vec<String>, String> {
+pub async fn dev_mode_status(manager: State<'_, DevModeManager>) -> Result<Vec<String>, String> {
     manager.get_active_sessions().await
 }
 
@@ -475,9 +523,7 @@ fn has_tugboat_entry(app_dir: &Path) -> bool {
         "src/tugboats.ts",
         "src/tugboats.tsx",
     ];
-    candidates
-        .iter()
-        .any(|c| app_dir.join(c).exists())
+    candidates.iter().any(|c| app_dir.join(c).exists())
 }
 
 // Helper functions
@@ -486,7 +532,7 @@ fn is_relevant_file_change(event: &Event) -> bool {
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
             event.paths.iter().any(|path| {
                 let path_str = path.to_string_lossy().to_lowercase();
-                
+
                 // Skip irrelevant directories/files and build artifacts
                 if path_str.contains("node_modules") ||
                    path_str.contains(".git") ||
@@ -502,27 +548,26 @@ fn is_relevant_file_change(event: &Event) -> bool {
                    path_str.ends_with("pnpm-lock.yaml") ||
                    path_str.ends_with("bun.lock") ||
                    path_str.ends_with("vite.config.mjs") ||
-                   path_str.ends_with("svelte.config.mjs") {
+                   path_str.ends_with("svelte.config.mjs")
+                {
                     return false;
                 }
 
                 // Include relevant file extensions
                 let relevant_extensions = [
-                    ".ts", ".tsx", ".js", ".jsx", ".svelte", ".vue",
-                    ".css", ".scss", ".sass", ".less", ".styl",
-                    ".json", ".toml", ".yaml", ".yml",
-                    ".html", ".htm", ".md"
+                    ".ts", ".tsx", ".js", ".jsx", ".svelte", ".vue", ".css", ".scss", ".sass",
+                    ".less", ".styl", ".json", ".toml", ".yaml", ".yml", ".html", ".htm", ".md",
                 ];
 
-                relevant_extensions.iter().any(|ext| path_str.ends_with(ext)) ||
-                    path_str.ends_with("package.json") ||
-                    path_str.ends_with("tsconfig.json") ||
-                    path_str.ends_with("vite.config.js") ||
-                    path_str.ends_with("vite.config.ts")
+                relevant_extensions
+                    .iter()
+                    .any(|ext| path_str.ends_with(ext))
+                    || path_str.ends_with("package.json")
+                    || path_str.ends_with("tsconfig.json")
+                    || path_str.ends_with("vite.config.js")
+                    || path_str.ends_with("vite.config.ts")
             })
         }
         _ => false,
     }
 }
-
-
