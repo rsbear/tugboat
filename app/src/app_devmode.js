@@ -89,7 +89,9 @@ async function aliasExistsInClones(alias) {
 }
 
 /** Start dev mode for alias */
-export async function startDevModeForAlias(alias) { return startDevMode(alias); }
+export async function startDevModeForAlias(alias) {
+  return startDevMode(alias);
+}
 
 async function startDevMode(alias) {
   try {
@@ -122,7 +124,9 @@ async function startDevMode(alias) {
 }
 
 /** Stop current dev mode session */
-export async function stopDevMode() { return stopCurrentDevMode(); }
+export async function stopDevMode() {
+  return stopCurrentDevMode();
+}
 
 async function stopCurrentDevMode() {
   if (!isDevModeActive || !currentDevAlias) return;
@@ -139,9 +143,18 @@ async function stopCurrentDevMode() {
     updateDevModeIndicator(null, "inactive");
 
     // Clean up listeners
-    if (stdoutUnlisten) { stdoutUnlisten(); stdoutUnlisten = null; }
-    if (urlUnlisten) { urlUnlisten(); urlUnlisten = null; }
-    if (stoppedUnlisten) { stoppedUnlisten(); stoppedUnlisten = null; }
+    if (stdoutUnlisten) {
+      stdoutUnlisten();
+      stdoutUnlisten = null;
+    }
+    if (urlUnlisten) {
+      urlUnlisten();
+      urlUnlisten = null;
+    }
+    if (stoppedUnlisten) {
+      stoppedUnlisten();
+      stoppedUnlisten = null;
+    }
 
     // Unmount any mounted dev module
     await unmountCurrentRemote();
@@ -152,7 +165,8 @@ async function unmountCurrentRemote() {
   const slot = ensureSlot();
   if (currentRemote.mod) {
     try {
-      const unmount = currentRemote.mod.unmount || currentRemote.mod.tugboatUnmount;
+      const unmount = currentRemote.mod.unmount ||
+        currentRemote.mod.tugboatUnmount;
       if (typeof unmount === "function") {
         await unmount(slot);
       }
@@ -209,7 +223,9 @@ async function initializeDevModeUI() {
 function setupEventListeners() {
   if (!stdoutUnlisten) {
     listen("dev:stdout", (event) => {
-      const line = typeof event.payload === "string" ? event.payload : event.payload?.line;
+      const line = typeof event.payload === "string"
+        ? event.payload
+        : event.payload?.line;
       if (line) addLogEntry("stdout", line);
     }).then((u) => (stdoutUnlisten = u));
   }
@@ -225,7 +241,8 @@ function setupEventListeners() {
         const mod = await loadRemoteDevModule(url);
         if (!mod) return;
         currentRemote.mod = mod;
-        const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount || mod.default;
+        const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount ||
+          mod.default;
         if (typeof mount === "function") {
           mount(slot);
         } else {
@@ -239,18 +256,36 @@ function setupEventListeners() {
     async function loadRemoteDevModule(baseUrl) {
       const candidates = [
         // Preferred tugboats entry
-        "tugboats.ts", "tugboats.tsx", "tugboats.js", "tugboats.jsx",
-        "src/tugboats.ts", "src/tugboats.tsx", "src/tugboats.js", "src/tugboats.jsx",
+        "tugboats.ts",
+        "tugboats.tsx",
+        "tugboats.js",
+        "tugboats.jsx",
+        "src/tugboats.ts",
+        "src/tugboats.tsx",
+        "src/tugboats.js",
+        "src/tugboats.jsx",
         // Harbor-style entry used in bundler examples
-        "harbor.ts", "harbor.tsx", "harbor.js", "harbor.jsx",
-        "src/harbor.ts", "src/harbor.tsx", "src/harbor.js", "src/harbor.jsx",
+        "harbor.ts",
+        "harbor.tsx",
+        "harbor.js",
+        "harbor.jsx",
+        "src/harbor.ts",
+        "src/harbor.tsx",
+        "src/harbor.js",
+        "src/harbor.jsx",
         // Legacy singular fallback
-        "tugboat.ts", "tugboat.tsx", "tugboat.js", "tugboat.jsx",
-        "src/tugboat.ts", "src/tugboat.tsx", "src/tugboat.js", "src/tugboat.jsx",
+        "tugboat.ts",
+        "tugboat.tsx",
+        "tugboat.js",
+        "tugboat.jsx",
+        "src/tugboat.ts",
+        "src/tugboat.tsx",
+        "src/tugboat.js",
+        "src/tugboat.jsx",
       ];
       for (const rel of candidates) {
         try {
-          const entry = `${baseUrl}/${rel}`;
+          const entry = `${baseUrl.replace(/\/$/, "")}/${rel}`;
           return await import(/* @vite-ignore */ entry);
         } catch (e) {
           // try next
@@ -281,11 +316,20 @@ function updateDevModeIndicator(alias, status) {
   let statusText = status;
   switch (status) {
     case "starting":
-      emoji = "🚀"; className += " starting"; statusText = "Starting..."; break;
+      emoji = "🚀";
+      className += " starting";
+      statusText = "Starting...";
+      break;
     case "active":
-      emoji = "👁️"; className += " active"; statusText = "Active"; break;
+      emoji = "👁️";
+      className += " active";
+      statusText = "Active";
+      break;
     case "error":
-      emoji = "❌"; className += " error"; statusText = "Error"; break;
+      emoji = "❌";
+      className += " error";
+      statusText = "Error";
+      break;
   }
   devModeIndicator.className = className;
   devModeIndicator.innerHTML = `${emoji} Dev: ${alias} (${statusText})`;
@@ -316,7 +360,10 @@ function addLogEntry(type, content, timestamp) {
 
 function showDevModeError(message) {
   console.error("Dev Mode Error:", message);
-  if (devModeLogContent) { addLogEntry("error", message); showDevModePanel(); }
+  if (devModeLogContent) {
+    addLogEntry("error", message);
+    showDevModePanel();
+  }
 }
 
 function clearDevModeLogs() {
@@ -325,12 +372,14 @@ function clearDevModeLogs() {
 function toggleDevModeLogs() {
   if (!devModeLogPanel) return;
   const isVisible = devModeLogPanel.style.display !== "none";
-  if (isVisible) hideDevModePanel(); else showDevModePanel();
+  if (isVisible) hideDevModePanel();
+  else showDevModePanel();
 }
 
 function escapeHtml(text) {
   const div = document.createElement("div");
-  div.textContent = text; return div.innerHTML;
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function addDevModeStyles() {

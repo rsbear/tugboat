@@ -11,7 +11,7 @@ use crate::kv;
 
 pub struct DevServerManager {
     app_handle: AppHandle,
-    inner: Arc<Mutex<DevState>>, 
+    inner: Arc<Mutex<DevState>>,
 }
 
 #[derive(Default)]
@@ -25,15 +25,22 @@ struct DevState {
 
 impl DevServerManager {
     pub fn new(app_handle: AppHandle) -> Self {
-        Self { app_handle, inner: Arc::new(Mutex::new(DevState::default())) }
+        Self {
+            app_handle,
+            inner: Arc::new(Mutex::new(DevState::default())),
+        }
     }
 
     fn emit_stdout(&self, line: &str) {
-        let _ = self.app_handle.emit("dev:stdout", &serde_json::json!({ "line": line }));
+        let _ = self
+            .app_handle
+            .emit("dev:stdout", &serde_json::json!({ "line": line }));
     }
 
     fn emit_url(&self, url: &str) {
-        let _ = self.app_handle.emit("dev:url", &serde_json::json!({ "url": url }));
+        let _ = self
+            .app_handle
+            .emit("dev:url", &serde_json::json!({ "url": url }));
     }
 
     fn emit_stopped(&self) {
@@ -76,24 +83,35 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
 
     // Read package.json and detect framework
     let pkg = read_package_json(&project_dir).await?;
-    let framework = detect_framework(&pkg).map_err(|e| format!("Framework detection failed: {}", e))?;
+    let framework =
+        detect_framework(&pkg).map_err(|e| format!("Framework detection failed: {}", e))?;
 
     // Ensure vite and framework plugin present
     run("npm", &["install", "-D", "vite"], Some(&project_dir)).await?;
     match framework.as_str() {
         "svelte" => {
-            run("npm", &["install", "-D", "@sveltejs/vite-plugin-svelte"], Some(&project_dir)).await?;
+            run(
+                "npm",
+                &["install", "-D", "@sveltejs/vite-plugin-svelte"],
+                Some(&project_dir),
+            )
+            .await?;
         }
         "react" => {
-            run("npm", &["install", "-D", "@vitejs/plugin-react"], Some(&project_dir)).await?;
+            run(
+                "npm",
+                &["install", "-D", "@vitejs/plugin-react"],
+                Some(&project_dir),
+            )
+            .await?;
         }
         _ => {}
     }
 
     // Resolve tugboats entry
-    let entry_rel = resolve_tugboats_entry(&project_dir).ok_or_else(||
+    let entry_rel = resolve_tugboats_entry(&project_dir).ok_or_else(|| {
         "No tugboats.ts/tsx/js/jsx entrypoint found (tried root and src/)".to_string()
-    )?;
+    })?;
 
     // Write temporary vite.config.mjs for dev
     let vite_config = match framework.as_str() {
@@ -105,7 +123,19 @@ export default {{
   plugins: [svelte()],
   server: {{
     strictPort: false,
-    cors: true
+    cors: true,
+    fs: {{
+      allow: ['.']
+    }}
+  }},
+  optimizeDeps: {{
+    include: ['react', 'react-dom'],
+    exclude: ['@tugboats/core']
+  }},
+  build: {{
+    rollupOptions: {{
+      external: ['@tugboats/core']
+    }}
   }}
 }};
 "#
@@ -118,14 +148,24 @@ export default {{
   plugins: [react()],
   server: {{
     strictPort: false,
-    cors: true
+    cors: true,
+    fs: {{
+      allow: ['.']
+    }}
+  }},
+  optimizeDeps: {{
+    include: ['react', 'react-dom'],
+    exclude: ['@tugboats/core']
+  }},
+  build: {{
+    rollupOptions: {{
+      external: ['@tugboats/core']
+    }}
   }}
 }};
 "#
         ),
-        other => {
-            return Err(format!("Unsupported framework for dev: {}", other))
-        }
+        other => return Err(format!("Unsupported framework for dev: {}", other)),
     };
 
     // Optionally ensure minimal svelte.config.mjs
@@ -155,7 +195,16 @@ export default config;
         .map_err(|e| format!("Failed to write vite.config.mjs: {}", e))?;
 
     // Choose dev command (force vite with our config)
-    let (cmd, mut args) = ("npx".to_string(), vec!["--yes".to_string(), "vite".to_string(), "dev".to_string(), "--config".to_string(), "vite.config.mjs".to_string()]);
+    let (cmd, mut args) = (
+        "npx".to_string(),
+        vec![
+            "--yes".to_string(),
+            "vite".to_string(),
+            "dev".to_string(),
+            "--config".to_string(),
+            "vite.config.mjs".to_string(),
+        ],
+    );
 
     // Spawn child
     let mut child = Command::new(&cmd)
@@ -169,12 +218,17 @@ export default config;
 
     // Pipe stdout
     if let Some(stdout) = child.stdout.take() {
-        let mgr = DevServerManager { app_handle: manager.app_handle.clone(), inner: manager.inner.clone() };
+        let mgr = DevServerManager {
+            app_handle: manager.app_handle.clone(),
+            inner: manager.inner.clone(),
+        };
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 let line_trim = line.trim();
-                if line_trim.is_empty() { continue; }
+                if line_trim.is_empty() {
+                    continue;
+                }
                 mgr.emit_stdout(line_trim);
                 if let Some(url) = extract_first_url(line_trim) {
                     mgr.emit_url(&url);
@@ -185,12 +239,17 @@ export default config;
 
     // Pipe stderr as stdout events (tagging is optional)
     if let Some(stderr) = child.stderr.take() {
-        let mgr = DevServerManager { app_handle: manager.app_handle.clone(), inner: manager.inner.clone() };
+        let mgr = DevServerManager {
+            app_handle: manager.app_handle.clone(),
+            inner: manager.inner.clone(),
+        };
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 let line_trim = line.trim();
-                if line_trim.is_empty() { continue; }
+                if line_trim.is_empty() {
+                    continue;
+                }
                 mgr.emit_stdout(line_trim);
             }
         });
@@ -254,7 +313,16 @@ pub async fn dev_status(manager: State<'_, DevServerManager>) -> Result<serde_js
 
 // Unused after config injection, but kept for potential future use
 async fn detect_dev_command(_app_dir: &Path) -> Result<(String, Vec<String>), String> {
-    Ok(("npx".into(), vec!["--yes".into(), "vite".into(), "dev".into(), "--config".into(), "vite.config.mjs".into()]))
+    Ok((
+        "npx".into(),
+        vec![
+            "--yes".into(),
+            "vite".into(),
+            "dev".into(),
+            "--config".into(),
+            "vite.config.mjs".into(),
+        ],
+    ))
 }
 
 async fn find_clone_directory(_app: &AppHandle, alias: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -264,15 +332,28 @@ async fn find_clone_directory(_app: &AppHandle, alias: &str) -> Result<(PathBuf,
         .await
         .map_err(|e| format!("Failed to read preferences: {}", e))?;
 
-    let prefs_json = match prefs_result { Some(item) => item.value, None => return Err("No preferences found".into()) };
-    let clones = prefs_json.get("clones").and_then(|c| c.as_array()).ok_or_else(|| "No clones array in preferences".to_string())?;
+    let prefs_json = match prefs_result {
+        Some(item) => item.value,
+        None => return Err("No preferences found".into()),
+    };
+    let clones = prefs_json
+        .get("clones")
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| "No clones array in preferences".to_string())?;
 
     for clone in clones {
         let clone_alias = clone.get("alias").and_then(|a| a.as_str()).unwrap_or("");
         if clone_alias == alias {
-            let github_url = clone.get("github_url").and_then(|u| u.as_str()).ok_or_else(|| "Missing github_url for clone".to_string())?;
-            let parsed = GitUrl::parse_https(github_url).map_err(|e| format!("Invalid github_url for clone '{}': {}", alias, e))?;
-            let dir = clone.get("dir").and_then(|d| d.as_str()).unwrap_or("~/tugboat_apps");
+            let github_url = clone
+                .get("github_url")
+                .and_then(|u| u.as_str())
+                .ok_or_else(|| "Missing github_url for clone".to_string())?;
+            let parsed = GitUrl::parse_https(github_url)
+                .map_err(|e| format!("Invalid github_url for clone '{}': {}", alias, e))?;
+            let dir = clone
+                .get("dir")
+                .and_then(|d| d.as_str())
+                .unwrap_or("~/tugboat_apps");
 
             let resolved_dir = if dir.starts_with("~/") {
                 let home = dirs::home_dir().ok_or("Could not find home directory")?;
@@ -283,13 +364,18 @@ async fn find_clone_directory(_app: &AppHandle, alias: &str) -> Result<(PathBuf,
                 PathBuf::from(dir)
             };
 
-            let full_clone_path = if resolved_dir.file_name().and_then(|n| n.to_str()) == Some("tugboat_apps") {
-                resolved_dir.join(parsed.repo())
-            } else {
-                resolved_dir.clone()
-            };
+            let full_clone_path =
+                if resolved_dir.file_name().and_then(|n| n.to_str()) == Some("tugboat_apps") {
+                    resolved_dir.join(parsed.repo())
+                } else {
+                    resolved_dir.clone()
+                };
 
-            let app_dir = if let Some(sub) = parsed.subpath() { full_clone_path.join(sub) } else { full_clone_path.clone() };
+            let app_dir = if let Some(sub) = parsed.subpath() {
+                full_clone_path.join(sub)
+            } else {
+                full_clone_path.clone()
+            };
             return Ok((full_clone_path, app_dir));
         }
     }
@@ -316,7 +402,11 @@ fn extract_first_url(line: &str) -> Option<String> {
 }
 
 fn take_until_ws(s: &str) -> String {
-    s.split_whitespace().next().unwrap_or("").trim_end_matches('\u{200B}').to_string()
+    s.split_whitespace()
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('\u{200B}')
+        .to_string()
 }
 
 // Helpers copied/adapted from bundler.rs
@@ -340,10 +430,20 @@ async fn ensure_tool(bin: &str, args: &[&str]) -> Result<(), String> {
 async fn run(bin: &str, args: &[&str], cwd: Option<&Path>) -> Result<(), String> {
     let mut cmd = Command::new(bin);
     cmd.args(args);
-    if let Some(dir) = cwd { cmd.current_dir(dir); }
-    let status = cmd.status().await.map_err(|e| format!("Failed to run '{} {}': {}", bin, args.join(" "), e))?;
+    if let Some(dir) = cwd {
+        cmd.current_dir(dir);
+    }
+    let status = cmd
+        .status()
+        .await
+        .map_err(|e| format!("Failed to run '{} {}': {}", bin, args.join(" "), e))?;
     if !status.success() {
-        return Err(format!("Command failed ({} {}): {:?}", bin, args.join(" "), status.code()));
+        return Err(format!(
+            "Command failed ({} {}): {:?}",
+            bin,
+            args.join(" "),
+            status.code()
+        ));
     }
     Ok(())
 }
@@ -353,36 +453,65 @@ async fn read_package_json(project_dir: &Path) -> Result<PackageJson, String> {
     let contents = tokio::fs::read_to_string(&pkg_path)
         .await
         .map_err(|e| format!("Failed to read package.json: {}", e))?;
-    serde_json::from_str::<PackageJson>(&contents).map_err(|e| format!("Failed to parse package.json: {}", e))
+    serde_json::from_str::<PackageJson>(&contents)
+        .map_err(|e| format!("Failed to parse package.json: {}", e))
 }
 
 fn detect_framework(pkg: &PackageJson) -> Result<String, String> {
-    let has = |name: &str| -> bool { pkg.dependencies.contains_key(name) || pkg.devDependencies.contains_key(name) };
-    if has("svelte") || has("@sveltejs/kit") || has("@sveltejs/vite-plugin-svelte") { return Ok("svelte".to_string()); }
-    if has("react") { return Ok("react".to_string()); }
+    let has = |name: &str| -> bool {
+        pkg.dependencies.contains_key(name) || pkg.devDependencies.contains_key(name)
+    };
+    if has("svelte") || has("@sveltejs/kit") || has("@sveltejs/vite-plugin-svelte") {
+        return Ok("svelte".to_string());
+    }
+    if has("react") {
+        return Ok("react".to_string());
+    }
     Err("Could not detect supported framework (react or svelte)".to_string())
 }
 
 fn resolve_tugboats_entry(repo_dir: &Path) -> Option<String> {
     let candidates = [
-        "tugboats.ts", "tugboats.tsx", "tugboats.js", "tugboats.jsx",
-        "src/tugboats.ts", "src/tugboats.tsx", "src/tugboats.js", "src/tugboats.jsx",
+        "tugboats.ts",
+        "tugboats.tsx",
+        "tugboats.js",
+        "tugboats.jsx",
+        "src/tugboats.ts",
+        "src/tugboats.tsx",
+        "src/tugboats.js",
+        "src/tugboats.jsx",
         // Harbor-style used by bundler examples
-        "harbor.ts", "harbor.tsx", "harbor.js", "harbor.jsx",
-        "src/harbor.ts", "src/harbor.tsx", "src/harbor.js", "src/harbor.jsx",
+        "harbor.ts",
+        "harbor.tsx",
+        "harbor.js",
+        "harbor.jsx",
+        "src/harbor.ts",
+        "src/harbor.tsx",
+        "src/harbor.js",
+        "src/harbor.jsx",
         // Legacy singular
-        "tugboat.ts", "tugboat.tsx", "tugboat.js", "tugboat.jsx",
-        "src/tugboat.ts", "src/tugboat.tsx", "src/tugboat.js", "src/tugboat.jsx",
+        "tugboat.ts",
+        "tugboat.tsx",
+        "tugboat.js",
+        "tugboat.jsx",
+        "src/tugboat.ts",
+        "src/tugboat.tsx",
+        "src/tugboat.js",
+        "src/tugboat.jsx",
     ];
     for c in candidates.iter() {
-        if repo_dir.join(c).exists() { return Some(c.to_string()); }
+        if repo_dir.join(c).exists() {
+            return Some(c.to_string());
+        }
     }
     None
 }
 
 fn find_package_json_dir(project_dir: &Path) -> Result<PathBuf, String> {
     let root_pkg = project_dir.join("package.json");
-    if root_pkg.exists() { return Ok(project_dir.to_path_buf()); }
+    if root_pkg.exists() {
+        return Ok(project_dir.to_path_buf());
+    }
 
     let mut candidates: Vec<PathBuf> = Vec::new();
     let read_dir = std::fs::read_dir(project_dir)
@@ -392,7 +521,9 @@ fn find_package_json_dir(project_dir: &Path) -> Result<PathBuf, String> {
             let p = entry.path();
             if p.is_dir() {
                 let pkg = p.join("package.json");
-                if pkg.exists() { candidates.push(p); }
+                if pkg.exists() {
+                    candidates.push(p);
+                }
             }
         }
     }
@@ -400,6 +531,9 @@ fn find_package_json_dir(project_dir: &Path) -> Result<PathBuf, String> {
     match candidates.len() {
         0 => Err("No package.json found at repo root or one-level nested".to_string()),
         1 => Ok(candidates.remove(0)),
-        _ => Err("Multiple package.json files found one-level nested; please specify the subdirectory".to_string()),
+        _ => Err(
+            "Multiple package.json files found one-level nested; please specify the subdirectory"
+                .to_string(),
+        ),
     }
 }
