@@ -476,28 +476,11 @@ fn resolve_tugboats_entry(repo_dir: &Path) -> Option<String> {
         "tugboats.tsx",
         "tugboats.js",
         "tugboats.jsx",
-        "src/tugboats.ts",
-        "src/tugboats.tsx",
-        "src/tugboats.js",
-        "src/tugboats.jsx",
-        // Harbor-style used by bundler examples
-        "harbor.ts",
-        "harbor.tsx",
-        "harbor.js",
-        "harbor.jsx",
-        "src/harbor.ts",
-        "src/harbor.tsx",
-        "src/harbor.js",
-        "src/harbor.jsx",
         // Legacy singular
         "tugboat.ts",
         "tugboat.tsx",
         "tugboat.js",
         "tugboat.jsx",
-        "src/tugboat.ts",
-        "src/tugboat.tsx",
-        "src/tugboat.js",
-        "src/tugboat.jsx",
     ];
     for c in candidates.iter() {
         if repo_dir.join(c).exists() {

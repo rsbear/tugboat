@@ -239,10 +239,13 @@ function setupEventListeners() {
       const slot = ensureSlot();
       try {
         const mod = await loadRemoteDevModule(url);
+        console.log("listen:dev:url loaded-mod", mod);
         if (!mod) return;
         currentRemote.mod = mod;
         const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount ||
           mod.default;
+        console.log("MOUNT", mount);
+        console.log("MOUNT SLOT", slot);
         if (typeof mount === "function") {
           mount(slot);
         } else {
@@ -254,43 +257,100 @@ function setupEventListeners() {
     }).then((u) => (urlUnlisten = u));
 
     async function loadRemoteDevModule(baseUrl) {
+      try {
+        // Dynamically import the Vite client to set up HMR and React Fast Refresh.
+        const viteClientUrl = `${baseUrl.replace(/\/$/, "")}/@vite/client`;
+        await import(/* @vite-ignore */ viteClientUrl);
+        console.log("[devmode] Vite client loaded successfully.");
+      } catch (e) {
+        console.warn(
+          "[devmode] Failed to load Vite HMR client. Hot reloading may not work.",
+          e,
+        );
+      }
+
+      // An array of possible entry file names to check for.
+      const candidates = [
+        "tugboats.tsx",
+        "tugboats.ts",
+        "tugboats.jsx",
+        "tugboats.js",
+        "tugboat.tsx",
+        "tugboat.ts",
+        "tugboat.jsx",
+        "tugboat.js",
+      ];
+
+      const maxRetries = 5;
+      const initialDelay = 200; // milliseconds
+
+      // Retry loop to handle the server startup race condition.
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        for (const rel of candidates) {
+          const entryUrl = `${baseUrl.replace(/\/$/, "")}/${rel}`;
+          try {
+            const mod = await import(/* @vite-ignore */ entryUrl);
+            if (mod) {
+              console.log(
+                `[devmode] Loaded remote module from: ${entryUrl} (attempt ${attempt})`,
+              );
+              return mod;
+            }
+          } catch (e) {
+            // Ignore errors, as we expect 404s for non-existent files.
+          }
+        }
+
+        // If all candidates failed, wait before the next full attempt.
+        if (attempt < maxRetries) {
+          console.log(
+            `[devmode] Module not found, retrying... (attempt ${
+              attempt + 1
+            }/${maxRetries})`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, initialDelay * attempt)
+          );
+        }
+      }
+
+      // If still not found after all retries.
+      const errorMsg = `No remote dev entry found at ${baseUrl}. Tried: ${
+        candidates.join(", ")
+      }`;
+      console.error(errorMsg);
+      return null;
+    }
+
+    async function loadRemoteDevModulee(baseUrl) {
+      console.log("BASEURL", baseUrl);
       const candidates = [
         // Preferred tugboats entry
         "tugboats.ts",
         "tugboats.tsx",
         "tugboats.js",
         "tugboats.jsx",
-        "src/tugboats.ts",
-        "src/tugboats.tsx",
-        "src/tugboats.js",
-        "src/tugboats.jsx",
-        // Harbor-style entry used in bundler examples
-        "harbor.ts",
-        "harbor.tsx",
-        "harbor.js",
-        "harbor.jsx",
-        "src/harbor.ts",
-        "src/harbor.tsx",
-        "src/harbor.js",
-        "src/harbor.jsx",
         // Legacy singular fallback
         "tugboat.ts",
         "tugboat.tsx",
         "tugboat.js",
         "tugboat.jsx",
-        "src/tugboat.ts",
-        "src/tugboat.tsx",
-        "src/tugboat.js",
-        "src/tugboat.jsx",
       ];
       for (const rel of candidates) {
+        const entry = `${baseUrl.replace(/\/$/, "")}/${rel}`;
         try {
-          const entry = `${baseUrl.replace(/\/$/, "")}/${rel}`;
-          return await import(/* @vite-ignore */ entry);
+          const mod = await import(/* @vite-ignore */ entry);
+          if (mod) {
+            console.log("[devmode] loaded", entry, Object.keys(mod));
+            return mod;
+          }
         } catch (e) {
-          // try next
+          console.debug("[devmode] failed", entry, e.message);
+          // continue trying other candidates instead of throwing
+          continue;
         }
       }
+      throw new Error(`No remote dev entry found at ${baseUrl}`);
       console.error("No remote dev entry found at", baseUrl);
       return null;
     }

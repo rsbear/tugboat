@@ -4,7 +4,6 @@
   "main": "src/index.tsx",
   "module": "src/index.tsx",
   "dependencies": {
-    "@tugboats/core": "^0.0.7",
     "react": "^19",
     "react-dom": "^19"
   },
