@@ -1,7 +1,13 @@
+var __defProp = Object.defineProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
 // src/input.ts
 var InputStore = class {
-  state = { raw: "" };
-  listeners = /* @__PURE__ */ new Set();
+  constructor() {
+    __publicField(this, "state", { raw: "" });
+    __publicField(this, "listeners", /* @__PURE__ */ new Set());
+  }
   get() {
     return this.state;
   }
@@ -76,8 +82,7 @@ async function kvDelete(baseKey, key) {
     return { _tag: "Error", result: errorMsg };
   }
 }
-export {
-  input,
-  kvTable
-};
+
+export { input, kvTable };
+//# sourceMappingURL=mod.js.map
 //# sourceMappingURL=mod.js.map

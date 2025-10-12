@@ -45,4 +45,4 @@ interface KvTable<T> {
 }
 declare function kvTable<T>(baseKey: string): KvTable<T>;
 
-export { input, kvTable };
+export { type InputState, type KvItem, type KvMsg, type KvTable, input, kvTable };
