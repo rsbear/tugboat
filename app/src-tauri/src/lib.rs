@@ -216,6 +216,7 @@ pub fn run() {
             devserver::start_dev,
             devserver::stop_dev,
             devserver::dev_status,
+            devserver::get_home_dir,
             // --- KV Commands ---
             kv::kv_factory_reset,
             kv::kv_get,

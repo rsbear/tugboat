@@ -104,7 +104,7 @@ async function aliasExistsInClones(alias) {
 }
 
 /** Start dev mode for alias */
-export async function startDevModeForAlias(alias) {
+export function startDevModeForAlias(alias) {
   return startDevMode(alias);
 }
 
@@ -139,7 +139,7 @@ async function startDevMode(alias) {
 }
 
 /** Stop current dev mode session */
-export async function stopDevMode() {
+export function stopDevMode() {
   return stopCurrentDevMode();
 }
 
@@ -194,11 +194,14 @@ async function unmountCurrentRemote() {
   // Fallback: call module-provided unmount if exported
   if (currentRemote.mod) {
     try {
-      const unmount = currentRemote.mod.unmount || currentRemote.mod.tugboatUnmount;
+      const unmount = currentRemote.mod.unmount ||
+        currentRemote.mod.tugboatUnmount;
       if (typeof unmount === "function") {
         await unmount(slot);
       }
-    } catch {}
+    } catch (_e) {
+      // Ignore unmount errors
+    }
   }
 
   if (slot) slot.innerHTML = "";
@@ -210,7 +213,7 @@ async function unmountCurrentRemote() {
 }
 
 /** Initialize dev mode UI elements */
-async function initializeDevModeUI() {
+function initializeDevModeUI() {
   if (devModeIndicator && devModeLogPanel && devModeLogContent) return;
 
   devModeIndicator = document.createElement("div");
@@ -254,130 +257,45 @@ async function initializeDevModeUI() {
 /** Setup event listeners for dev server events */
 function setupEventListeners() {
   if (!stdoutUnlisten) {
-    listen("dev:stdout", (event) => {
-      const line = typeof event.payload === "string"
-        ? event.payload
-        : event.payload?.line;
-      if (line) addLogEntry("stdout", line);
+    listen("dev:build_started", (event) => {
+      const alias = event.payload;
+      addLogEntry("info", `🔨 Building ${alias}...`);
     }).then((u) => (stdoutUnlisten = u));
   }
+
   if (!urlUnlisten) {
-    listen("dev:url", async (event) => {
-      const { url } = event.payload;
-      if (typeof url !== "string" || !url) return;
-      if (currentRemote.url === url) return;
-      await remountDevModule(url);
+    listen("dev:build_completed", async (event) => {
+      const alias = event.payload;
+      addLogEntry("success", `✅ Build completed for ${alias}`);
+      await loadDevBundle(alias);
     }).then((u) => (urlUnlisten = u));
-
-    async function loadRemoteDevModule(baseUrl) {
-      try {
-        // Dynamically import the Vite client to set up HMR and React Fast Refresh.
-        const viteClientUrl = `${baseUrl.replace(/\/$/, "")}/@vite/client`;
-        await import(/* @vite-ignore */ viteClientUrl);
-        console.log("[devmode] Vite client loaded successfully.");
-      } catch (e) {
-        console.warn(
-          "[devmode] Failed to load Vite HMR client. Hot reloading may not work.",
-          e,
-        );
-      }
-
-      // An array of possible entry file names to check for.
-      const candidates = [
-        "tugboats.tsx",
-        "tugboats.ts",
-        "tugboats.jsx",
-        "tugboats.js",
-        "tugboat.tsx",
-        "tugboat.ts",
-        "tugboat.jsx",
-        "tugboat.js",
-      ];
-
-      const maxRetries = 5;
-      const initialDelay = 200; // milliseconds
-
-      // Retry loop to handle the server startup race condition.
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        for (const rel of candidates) {
-          const entryUrl = `${baseUrl.replace(/\/$/, "")}/${rel}`;
-          try {
-            const mod = await import(/* @vite-ignore */ entryUrl);
-            if (mod) {
-              console.log(
-                `[devmode] Loaded remote module from: ${entryUrl} (attempt ${attempt})`,
-              );
-              return mod;
-            }
-          } catch (e) {
-            // Ignore errors, as we expect 404s for non-existent files.
-          }
-        }
-
-        // If all candidates failed, wait before the next full attempt.
-        if (attempt < maxRetries) {
-          console.log(
-            `[devmode] Module not found, retrying... (attempt ${
-              attempt + 1
-            }/${maxRetries})`,
-          );
-          await new Promise((resolve) =>
-            setTimeout(resolve, initialDelay * attempt)
-          );
-        }
-      }
-
-      // If still not found after all retries.
-      const errorMsg = `No remote dev entry found at ${baseUrl}. Tried: ${
-        candidates.join(", ")
-      }`;
-      console.error(errorMsg);
-      return null;
-    }
-
-    async function loadRemoteDevModulee(baseUrl) {
-      console.log("BASEURL", baseUrl);
-      const candidates = [
-        // Preferred tugboats entry
-        "tugboats.ts",
-        "tugboats.tsx",
-        "tugboats.js",
-        "tugboats.jsx",
-        // Legacy singular fallback
-        "tugboat.ts",
-        "tugboat.tsx",
-        "tugboat.js",
-        "tugboat.jsx",
-      ];
-      for (const rel of candidates) {
-        const entry = `${baseUrl.replace(/\/$/, "")}/${rel}`;
-        try {
-          const mod = await import(/* @vite-ignore */ entry);
-          if (mod) {
-            console.log("[devmode] loaded", entry, Object.keys(mod));
-            return mod;
-          }
-        } catch (e) {
-          console.debug("[devmode] failed", entry, e.message);
-          // continue trying other candidates instead of throwing
-          continue;
-        }
-      }
-      throw new Error(`No remote dev entry found at ${baseUrl}`);
-      console.error("No remote dev entry found at", baseUrl);
-      return null;
-    }
   }
-  // ---- START: Add new listener for HMR ----
+
+  // Listen for build errors
+  listen("dev:build_error", (event) => {
+    const [alias, error] = event.payload;
+    addLogEntry("error", `❌ Build failed for ${alias}:`);
+    addLogEntry("error", error);
+    showDevModeError(`Build failed: ${error}`);
+  });
+
+  // Listen for dev ready
+  listen("dev:ready", async (event) => {
+    const alias = event.payload;
+    addLogEntry("info", `🚀 Dev mode ready for ${alias}`);
+    await loadDevBundle(alias);
+  });
+
+  // Listen for build success (triggers remount)
   if (!remountUnlisten) {
-    listen("dev:remount", async (event) => {
-      console.log("HMR remount triggered by file change.");
-      if (isDevModeActive && currentRemote.url) {
-        await remountDevModule(currentRemote.url);
+    listen("dev:build_success", async (event) => {
+      const alias = event.payload;
+      console.log("Build success, remounting for:", alias);
+      if (isDevModeActive && currentDevAlias === alias) {
+        await loadDevBundle(alias);
       }
     }).then((u) => (remountUnlisten = u));
   }
-  // ---- END: Add new listener for HMR ----
   if (!stoppedUnlisten) {
     listen("dev:stopped", async () => {
       await unmountCurrentRemote();
@@ -386,17 +304,36 @@ function setupEventListeners() {
   }
 }
 
-// ---- START: Create a new function to handle mounting ----
-// This function will be called both initially and on every file change.
-async function remountDevModule(url) {
+// Load and mount dev bundle from filesystem
+async function loadDevBundle(alias) {
   await unmountCurrentRemote();
-  currentRemote.url = url;
+
   const slot = ensureSlot();
   try {
-    const mod = await loadRemoteDevModule(url);
+    // Get the dev bundle path - look for the dev bundle directly
+    const home = await invoke("get_home_dir");
+    const bundlePath = `${home}/.tugboats/bundles/${alias}-dev.js`;
+
+    // Read the bundle content
+    const bundleContent = await invoke("read_text_file", { path: bundlePath });
+
+    // Create a blob URL from the bundle content
+    const blob = new Blob([bundleContent], { type: "application/javascript" });
+    const bundleUrl = URL.createObjectURL(blob);
+
+    // Import the module
+    const mod = await import(/* @vite-ignore */ bundleUrl);
+
+    // Clean up the blob URL
+    URL.revokeObjectURL(bundleUrl);
+
     if (!mod) return;
+
     currentRemote.mod = mod;
-    const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount || mod.default;
+    currentRemote.url = bundlePath; // Store bundle path for reference
+
+    const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount ||
+      mod.default;
     if (typeof mount === "function") {
       const dispose = await mount(slot);
       if (typeof dispose === "function") {
@@ -407,62 +344,9 @@ async function remountDevModule(url) {
     }
   } catch (e) {
     console.error("Failed to load or mount dev module", e);
+    console.error("[devmode] Failed to load dev bundle:", e);
+    showDevModeError(`Failed to load bundle: ${e}`);
   }
-}
-// ---- END: Create a new function to handle mounting ----
-
-// Old function with retries, hoisted to top-level for reuse
-async function loadRemoteDevModule(baseUrl) {
-  try {
-    const viteClientUrl = `${baseUrl.replace(/\/$/, "")}/@vite/client`;
-    await import(/* @vite-ignore */ viteClientUrl);
-    console.log("[devmode] Vite client loaded successfully.");
-  } catch (e) {
-    console.warn(
-      "[devmode] Failed to load Vite HMR client. Hot reloading may not work.",
-      e,
-    );
-  }
-
-  const candidates = [
-    "tugboats.tsx",
-    "tugboats.ts",
-    "tugboats.jsx",
-    "tugboats.js",
-    "tugboat.tsx",
-    "tugboat.ts",
-    "tugboat.jsx",
-    "tugboat.js",
-  ];
-
-  const maxRetries = 5;
-  const initialDelay = 200;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    for (const rel of candidates) {
-      const entryUrl = `${baseUrl.replace(/\/$/, "")}/${rel}`;
-      try {
-        const mod = await import(/* @vite-ignore */ entryUrl);
-        if (mod) {
-          console.log(
-            `[devmode] Loaded remote module from: ${entryUrl} (attempt ${attempt})`,
-          );
-          return mod;
-        }
-      } catch (e) {
-        // ignore; try next candidate
-      }
-    }
-    if (attempt < maxRetries) {
-      console.log(
-        `[devmode] Module not found, retrying... (attempt ${attempt + 1}/${maxRetries})`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, initialDelay * attempt));
-    }
-  }
-  const errorMsg = `No remote dev entry found at ${baseUrl}. Tried: ${candidates.join(", ")}`;
-  console.error(errorMsg);
-  return null;
 }
 
 /** Update dev mode indicator */

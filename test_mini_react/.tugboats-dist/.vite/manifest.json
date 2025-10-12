@@ -1,0 +1,8 @@
+{
+  "tugboats.tsx": {
+    "file": "reactapp-dev.js",
+    "name": "tugboats",
+    "src": "tugboats.tsx",
+    "isEntry": true
+  }
+}

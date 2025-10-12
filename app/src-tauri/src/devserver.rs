@@ -1,12 +1,10 @@
 use notify::{RecursiveMode, Watcher};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
+use tokio::process::Command;
+use tokio::sync::mpsc;
 
 use crate::git_url_parser::GitUrl;
 use crate::kv;
@@ -16,15 +14,28 @@ pub struct DevServerManager {
     inner: Arc<Mutex<DevState>>,
 }
 
-#[derive(Default)]
 struct DevState {
     current_alias: Option<String>,
-    child: Option<Child>,
-    // File watcher to trigger remount events in dev
+    // File watcher to trigger build on save
     watcher: Option<notify::RecommendedWatcher>,
     temp_vite_config: Option<PathBuf>,
     temp_svelte_config: Option<PathBuf>,
     project_dir: Option<PathBuf>,
+    // Channel to signal rebuild requests from file watcher
+    rebuild_sender: Option<mpsc::UnboundedSender<()>>,
+}
+
+impl Default for DevState {
+    fn default() -> Self {
+        Self {
+            current_alias: None,
+            watcher: None,
+            temp_vite_config: None,
+            temp_svelte_config: None,
+            project_dir: None,
+            rebuild_sender: None,
+        }
+    }
 }
 
 impl DevServerManager {
@@ -62,13 +73,12 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
         }
     }
 
-    // Stop any existing dev server first
+    // Stop any existing dev mode first
     stop_dev(manager.clone()).await.ok();
 
     // Resolve working directory: clone root and app subpath (if any)
     let (_clone_root, app_dir) = find_clone_directory(&manager.app_handle, &alias).await?;
 
-    // Determine project directory (where package.json lives)
     // Determine project directory (where package.json lives)
     let project_dir = if app_dir.join("package.json").exists() {
         app_dir.clone()
@@ -186,57 +196,58 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
         "No tugboats.ts/tsx/js/jsx entrypoint found (tried root and src/)".to_string()
     })?;
 
-    // Write temporary vite.config.mjs for dev
+    // Bundle name for dev mode
+    let bundle_file = format!("{}-dev.js", alias);
+
+    // Write temporary vite.config.mjs for build
     let vite_config = match framework.as_str() {
         "svelte" => format!(
             r#"import {{ svelte }} from '@sveltejs/vite-plugin-svelte';
 
 export default {{
-  define: {{ 'process.env.NODE_ENV': '"development"', 'process.env': {{}}, process: {{}}, global: 'globalThis' }},
+  define: {{ 'process.env.NODE_ENV': '"production"', 'process.env': {{}}, process: {{}}, global: 'globalThis' }},
   plugins: [svelte()],
-  server: {{
-    strictPort: false,
-    cors: true,
-    fs: {{
-      allow: ['.']
-    }}
-  }},
-  optimizeDeps: {{
-    include: ['react', 'react-dom'],
-    exclude: ['@tugboats/core']
-  }},
   build: {{
+    outDir: '.tugboats-dist',
+    sourcemap: false,
+    manifest: true,
+    lib: {{
+      entry: './{entry}',
+      formats: ['es'],
+      fileName: () => '{bundle_file}'
+    }},
     rollupOptions: {{
       external: ['@tugboats/core']
     }}
   }}
 }};
-"#
+"#,
+            entry = entry_rel,
+            bundle_file = bundle_file
         ),
         "react" => format!(
             r#"import react from '@vitejs/plugin-react';
 
 export default {{
-  define: {{ 'process.env.NODE_ENV': '"development"', 'process.env': {{}}, process: {{}}, global: 'globalThis' }},
+  define: {{ 'process.env.NODE_ENV': '"production"', 'process.env': {{}}, process: {{}}, global: 'globalThis' }},
   plugins: [react()],
-  server: {{
-    strictPort: false,
-    cors: true,
-    fs: {{
-      allow: ['.']
-    }}
-  }},
-  optimizeDeps: {{
-    include: ['react', 'react-dom'],
-    exclude: ['@tugboats/core']
-  }},
   build: {{
+    outDir: '.tugboats-dist',
+    sourcemap: false,
+    manifest: true,
+    lib: {{
+      entry: './{entry}',
+      formats: ['es'],
+      fileName: () => '{bundle_file}'
+    }},
     rollupOptions: {{
       external: ['@tugboats/core']
     }}
   }}
 }};
-"#
+"#,
+            entry = entry_rel,
+            bundle_file = bundle_file
         ),
         other => return Err(format!("Unsupported framework for dev: {}", other)),
     };
@@ -267,169 +278,221 @@ export default config;
         .await
         .map_err(|e| format!("Failed to write vite.config.mjs: {}", e))?;
 
-    // Choose dev command based on detected package manager
-    let (cmd, args) = match package_manager {
-        "npm" => (
-            "npx".to_string(),
-            vec![
-                "--yes".to_string(),
-                "vite".to_string(),
-                "dev".to_string(),
-                "--config".to_string(),
-                "vite.config.mjs".to_string(),
-            ],
-        ),
-        "deno" => (
-            "deno".to_string(),
-            vec![
-                "run".to_string(),
-                "--allow-all".to_string(),
-                "npm:vite".to_string(),
-                "dev".to_string(),
-                "--config".to_string(),
-                "vite.config.mjs".to_string(),
-            ],
-        ),
-        "bun" => (
-            "bunx".to_string(),
-            vec![
-                "vite".to_string(),
-                "dev".to_string(),
-                "--config".to_string(),
-                "vite.config.mjs".to_string(),
-            ],
-        ),
-        _ => (
-            "npx".to_string(),
-            vec![
-                "--yes".to_string(),
-                "vite".to_string(),
-                "dev".to_string(),
-                "--config".to_string(),
-                "vite.config.mjs".to_string(),
-            ],
-        ),
-    };
+    // Perform initial build
+    build_dev_bundle(
+        &manager,
+        &alias,
+        &project_dir,
+        &package_manager,
+        &bundle_file,
+    )
+    .await?;
 
-    // Spawn child
-    let mut child = Command::new(&cmd)
-        .args(&args)
-        .current_dir(&project_dir)
-        .env("BROWSER", "none")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to spawn dev server: {}", e))?;
-
-    // Pipe stdout
-    if let Some(stdout) = child.stdout.take() {
-        let mgr = DevServerManager {
-            app_handle: manager.app_handle.clone(),
-            inner: manager.inner.clone(),
-        };
-        tokio::spawn(async move {
-            let mut reader = BufReader::new(stdout).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let line_trim = line.trim();
-                if line_trim.is_empty() {
-                    continue;
-                }
-                mgr.emit_stdout(line_trim);
-                if let Some(url) = extract_first_url(line_trim) {
-                    mgr.emit_url(&url);
-                }
-            }
-        });
-    }
-
-    // Pipe stderr as stdout events (tagging is optional)
-    if let Some(stderr) = child.stderr.take() {
-        let mgr = DevServerManager {
-            app_handle: manager.app_handle.clone(),
-            inner: manager.inner.clone(),
-        };
-        tokio::spawn(async move {
-            let mut reader = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let line_trim = line.trim();
-                if line_trim.is_empty() {
-                    continue;
-                }
-                mgr.emit_stdout(line_trim);
-            }
-        });
-    }
-
-    // ----- START: Add File Watcher Logic -----
+    // Set up file watcher for JIT builds with channel-based communication
+    let (rebuild_tx, mut rebuild_rx) = mpsc::unbounded_channel();
+    
+    // Clone data for the background rebuild task
     let app_handle_clone = manager.app_handle.clone();
     let alias_clone = alias.clone();
-    let mut watcher =
-        notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| match res {
-            Ok(event) => {
-                if event.kind.is_modify() || event.kind.is_create() {
-                    let should_remount = event.paths.iter().any(|path| {
-                        path.extension()
-                            .and_then(|ext| ext.to_str())
-                            .map_or(false, |ext| {
-                                matches!(ext, "js" | "ts" | "jsx" | "tsx" | "svelte" | "css")
-                            })
-                    });
-                    if should_remount {
-                        println!(
-                            "[Dev Watcher] Detected change, emitting remount event for '{}'",
-                            &alias_clone
-                        );
-                        let _ = app_handle_clone.emit("dev:remount", &alias_clone);
-                    }
+    let project_dir_clone = project_dir.clone();
+    let package_manager_clone = package_manager.to_string();
+    let bundle_file_clone = bundle_file.clone();
+
+    // Spawn background task to handle rebuild requests
+    tokio::spawn(async move {
+        while rebuild_rx.recv().await.is_some() {
+            println!(
+                "[Dev Watcher] Processing rebuild request for '{}'",
+                &alias_clone
+            );
+
+            let mgr = DevServerManager {
+                app_handle: app_handle_clone.clone(),
+                inner: std::sync::Arc::new(std::sync::Mutex::new(
+                    DevState::default(),
+                )),
+            };
+
+            match build_dev_bundle(
+                &mgr,
+                &alias_clone,
+                &project_dir_clone,
+                &package_manager_clone,
+                &bundle_file_clone,
+            )
+            .await
+            {
+                Ok(_) => {
+                    println!("[Dev Watcher] Build succeeded for '{}'", &alias_clone);
+                    let _ = app_handle_clone.emit("dev:build_success", &alias_clone);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[Dev Watcher] Build failed for '{}': {}",
+                        &alias_clone, e
+                    );
+                    let _ = app_handle_clone.emit("dev:build_error", (&alias_clone, &e));
                 }
             }
-            Err(e) => eprintln!("[Dev Watcher] Watch error: {:?}", e),
+        }
+    });
+
+    let mut watcher = {
+        let alias = alias.clone();
+        let rebuild_tx = rebuild_tx.clone();
+
+        notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+            match res {
+                Ok(event) => {
+                    // Only trigger on modify events (saves), not creates or other changes
+                    if event.kind.is_modify() {
+                        let should_build = event.paths.iter().any(|path| {
+                            // Ignore changes in .tugboats-dist directory to prevent infinite loops
+                            if path.components().any(|component| {
+                                component.as_os_str() == ".tugboats-dist"
+                            }) {
+                                return false;
+                            }
+                            
+                            path.extension()
+                                .and_then(|ext| ext.to_str())
+                                .map_or(false, |ext| {
+                                    matches!(ext, "js" | "ts" | "jsx" | "tsx" | "svelte" | "css")
+                                })
+                        });
+                        if should_build {
+                            println!(
+                                "[Dev Watcher] Detected file save, triggering build for '{}'",
+                                &alias
+                            );
+
+                            // Send rebuild signal through channel
+                            if let Err(e) = rebuild_tx.send(()) {
+                                eprintln!("[Dev Watcher] Failed to send rebuild signal: {}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => eprintln!("[Dev Watcher] Watch error: {:?}", e),
+            }
         })
-        .map_err(|e| format!("Failed to create file watcher: {}", e))?;
+        .map_err(|e| format!("Failed to create file watcher: {}", e))?
+    };
 
     watcher
         .watch(project_dir.as_path(), RecursiveMode::Recursive)
         .map_err(|e| format!("Failed to start file watcher: {}", e))?;
-    // ----- END: Add File Watcher Logic -----
 
     // Update state
     {
         let mut st = manager.inner.lock().unwrap();
-        st.current_alias = Some(alias);
-        st.child = Some(child);
+        st.current_alias = Some(alias.clone());
         st.watcher = Some(watcher);
         st.temp_vite_config = Some(temp_config_path);
         st.temp_svelte_config = created_svelte_config;
         st.project_dir = Some(project_dir);
+        st.rebuild_sender = Some(rebuild_tx);
     }
+
+    // Emit initial success to let frontend know dev mode is ready
+    manager.app_handle.emit("dev:ready", &alias).ok();
+
+    Ok(())
+}
+
+async fn build_dev_bundle(
+    manager: &DevServerManager,
+    alias: &str,
+    project_dir: &Path,
+    package_manager: &str,
+    bundle_file: &str,
+) -> Result<(), String> {
+    manager.app_handle.emit("dev:build_started", alias).ok();
+
+    // Choose build command based on detected package manager
+    let (cmd, args) = match package_manager {
+        "npm" => (
+            "npx",
+            vec!["--yes", "vite", "build", "--config", "vite.config.mjs"],
+        ),
+        "deno" => (
+            "deno",
+            vec![
+                "run",
+                "--allow-all",
+                "npm:vite",
+                "build",
+                "--config",
+                "vite.config.mjs",
+            ],
+        ),
+        "bun" => ("bunx", vec!["vite", "build", "--config", "vite.config.mjs"]),
+        _ => (
+            "npx",
+            vec!["--yes", "vite", "build", "--config", "vite.config.mjs"],
+        ),
+    };
+
+    // Run build command and capture output
+    let output = Command::new(cmd)
+        .args(&args)
+        .current_dir(project_dir)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run build command: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let error_msg = format!("Build failed:\n{}\n{}", stderr, stdout);
+        return Err(error_msg);
+    }
+
+    // Read built bundle
+    let built_path = project_dir.join(".tugboats-dist").join(bundle_file);
+    let js_code = tokio::fs::read_to_string(&built_path)
+        .await
+        .map_err(|e| format!("Failed to read built bundle: {}", e))?;
+
+    // Save to bundles directory
+    let home = dirs::home_dir().ok_or("No home directory found")?;
+    let bundles_dir = home.join(".tugboats").join("bundles");
+    std::fs::create_dir_all(&bundles_dir)
+        .map_err(|e| format!("Failed to create bundles dir: {}", e))?;
+
+    let bundle_path = bundles_dir.join(bundle_file);
+    std::fs::write(&bundle_path, &js_code).map_err(|e| format!("Failed to write bundle: {}", e))?;
+
+    // Write empty importmap for consistency
+    let importmap_stem = bundle_file.strip_suffix(".js").unwrap_or(bundle_file);
+    let importmap_path = bundles_dir.join(format!("{}.importmap.json", importmap_stem));
+    let empty_map = "{\n  \"imports\": {}\n}";
+    std::fs::write(&importmap_path, empty_map)
+        .map_err(|e| format!("Failed to write import map: {}", e))?;
+
+    manager.app_handle.emit("dev:build_completed", alias).ok();
 
     Ok(())
 }
 
 #[tauri::command]
 pub async fn stop_dev(manager: State<'_, DevServerManager>) -> Result<(), String> {
-    let mut child_opt = None;
     let mut watcher_opt = None;
+    let mut rebuild_sender_opt = None;
     {
         let mut st = manager.inner.lock().unwrap();
-        if let Some(mut child) = st.child.take() {
-            child_opt = Some(child);
-        }
         if let Some(watcher) = st.watcher.take() {
             watcher_opt = Some(watcher);
+        }
+        if let Some(sender) = st.rebuild_sender.take() {
+            rebuild_sender_opt = Some(sender);
         }
         st.current_alias = None;
     }
 
-    // Explicitly drop the watcher outside the lock to stop it
+    // Explicitly drop the watcher and sender outside the lock to stop them
     drop(watcher_opt);
-
-    if let Some(mut child) = child_opt {
-        // Try graceful kill; fallback to force kill
-        if let Err(e) = child.kill().await {
-            eprintln!("Failed to kill dev server: {}", e);
-        }
-    }
+    drop(rebuild_sender_opt);
 
     // Cleanup temp files
     {
@@ -452,7 +515,7 @@ pub async fn dev_status(manager: State<'_, DevServerManager>) -> Result<serde_js
     let st = manager.inner.lock().unwrap();
     Ok(serde_json::json!({
         "alias": st.current_alias,
-        "running": st.child.is_some()
+        "running": st.watcher.is_some()
     }))
 }
 
@@ -580,12 +643,20 @@ struct PackageJson {
 }
 
 async fn ensure_tool(bin: &str, args: &[&str]) -> Result<(), String> {
-    Command::new(bin)
+    let output = Command::new(bin)
         .args(args)
         .output()
         .await
-        .map_err(|e| format!("Required tool '{}' not available: {}", bin, e))
-        .map(|_| ())
+        .map_err(|e| format!("Required tool '{}' not available: {}", bin, e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Tool '{}' returned non-zero status: {:?}",
+            bin,
+            output.status.code()
+        ));
+    }
+    Ok(())
 }
 
 async fn run(bin: &str, args: &[&str], cwd: Option<&Path>) -> Result<(), String> {
@@ -658,6 +729,12 @@ fn detect_package_manager(project_dir: &Path) -> &'static str {
         _ if project_dir.join("bun.lock").exists() => "bun",
         _ => "npm", // default fallback
     }
+}
+
+#[tauri::command]
+pub async fn get_home_dir() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("No home directory found")?;
+    Ok(home.to_string_lossy().to_string())
 }
 
 fn find_package_json_dir(project_dir: &Path) -> Result<PathBuf, String> {
