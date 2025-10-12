@@ -14,12 +14,13 @@ let devModeLogPanel = null;
 let devModeLogContent = null;
 
 // Remote module mount state
-let currentRemote = { url: null, mod: null };
+let currentRemote = { url: null, mod: null, cleanup: null };
 let tugboatsSlotEl = null;
 
 // Event listeners
 let stdoutUnlisten = null;
 let urlUnlisten = null;
+let remountUnlisten = null;
 let stoppedUnlisten = null;
 
 const prefsKV = kvTable("preferences");
@@ -27,6 +28,20 @@ const prefsKV = kvTable("preferences");
 // Utility: ensure slot element reference
 function ensureSlot() {
   if (!tugboatsSlotEl) {
+    tugboatsSlotEl = document.getElementById("tugboats-slot");
+  }
+  return tugboatsSlotEl;
+}
+
+// Utility: recreate slot element to avoid double React createRoot on same container
+function recreateSlot() {
+  const oldSlot = document.getElementById("tugboats-slot");
+  if (oldSlot && oldSlot.parentNode) {
+    const newSlot = document.createElement("div");
+    newSlot.id = "tugboats-slot";
+    oldSlot.parentNode.replaceChild(newSlot, oldSlot);
+    tugboatsSlotEl = newSlot;
+  } else {
     tugboatsSlotEl = document.getElementById("tugboats-slot");
   }
   return tugboatsSlotEl;
@@ -151,6 +166,10 @@ async function stopCurrentDevMode() {
       urlUnlisten();
       urlUnlisten = null;
     }
+    if (remountUnlisten) {
+      remountUnlisten();
+      remountUnlisten = null;
+    }
     if (stoppedUnlisten) {
       stoppedUnlisten();
       stoppedUnlisten = null;
@@ -163,16 +182,29 @@ async function stopCurrentDevMode() {
 
 async function unmountCurrentRemote() {
   const slot = ensureSlot();
+
+  // Prefer cleanup function returned by mount if available
+  if (typeof currentRemote.cleanup === "function") {
+    try {
+      await currentRemote.cleanup();
+    } catch {}
+    currentRemote.cleanup = null;
+  }
+
+  // Fallback: call module-provided unmount if exported
   if (currentRemote.mod) {
     try {
-      const unmount = currentRemote.mod.unmount ||
-        currentRemote.mod.tugboatUnmount;
+      const unmount = currentRemote.mod.unmount || currentRemote.mod.tugboatUnmount;
       if (typeof unmount === "function") {
         await unmount(slot);
       }
     } catch {}
   }
+
   if (slot) slot.innerHTML = "";
+  // Replace the container to ensure React 18 createRoot gets a fresh node
+  recreateSlot();
+
   currentRemote.mod = null;
   currentRemote.url = null;
 }
@@ -234,26 +266,7 @@ function setupEventListeners() {
       const { url } = event.payload;
       if (typeof url !== "string" || !url) return;
       if (currentRemote.url === url) return;
-      await unmountCurrentRemote();
-      currentRemote.url = url;
-      const slot = ensureSlot();
-      try {
-        const mod = await loadRemoteDevModule(url);
-        console.log("listen:dev:url loaded-mod", mod);
-        if (!mod) return;
-        currentRemote.mod = mod;
-        const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount ||
-          mod.default;
-        console.log("MOUNT", mount);
-        console.log("MOUNT SLOT", slot);
-        if (typeof mount === "function") {
-          mount(slot);
-        } else {
-          console.error("No mount function exported from dev module");
-        }
-      } catch (e) {
-        console.error("Failed to load dev module", e);
-      }
+      await remountDevModule(url);
     }).then((u) => (urlUnlisten = u));
 
     async function loadRemoteDevModule(baseUrl) {
@@ -355,12 +368,101 @@ function setupEventListeners() {
       return null;
     }
   }
+  // ---- START: Add new listener for HMR ----
+  if (!remountUnlisten) {
+    listen("dev:remount", async (event) => {
+      console.log("HMR remount triggered by file change.");
+      if (isDevModeActive && currentRemote.url) {
+        await remountDevModule(currentRemote.url);
+      }
+    }).then((u) => (remountUnlisten = u));
+  }
+  // ---- END: Add new listener for HMR ----
   if (!stoppedUnlisten) {
     listen("dev:stopped", async () => {
       await unmountCurrentRemote();
       updateDevModeIndicator(null, "inactive");
     }).then((u) => (stoppedUnlisten = u));
   }
+}
+
+// ---- START: Create a new function to handle mounting ----
+// This function will be called both initially and on every file change.
+async function remountDevModule(url) {
+  await unmountCurrentRemote();
+  currentRemote.url = url;
+  const slot = ensureSlot();
+  try {
+    const mod = await loadRemoteDevModule(url);
+    if (!mod) return;
+    currentRemote.mod = mod;
+    const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount || mod.default;
+    if (typeof mount === "function") {
+      const dispose = await mount(slot);
+      if (typeof dispose === "function") {
+        currentRemote.cleanup = dispose;
+      }
+    } else {
+      console.error("No mount function exported from dev module");
+    }
+  } catch (e) {
+    console.error("Failed to load or mount dev module", e);
+  }
+}
+// ---- END: Create a new function to handle mounting ----
+
+// Old function with retries, hoisted to top-level for reuse
+async function loadRemoteDevModule(baseUrl) {
+  try {
+    const viteClientUrl = `${baseUrl.replace(/\/$/, "")}/@vite/client`;
+    await import(/* @vite-ignore */ viteClientUrl);
+    console.log("[devmode] Vite client loaded successfully.");
+  } catch (e) {
+    console.warn(
+      "[devmode] Failed to load Vite HMR client. Hot reloading may not work.",
+      e,
+    );
+  }
+
+  const candidates = [
+    "tugboats.tsx",
+    "tugboats.ts",
+    "tugboats.jsx",
+    "tugboats.js",
+    "tugboat.tsx",
+    "tugboat.ts",
+    "tugboat.jsx",
+    "tugboat.js",
+  ];
+
+  const maxRetries = 5;
+  const initialDelay = 200;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (const rel of candidates) {
+      const entryUrl = `${baseUrl.replace(/\/$/, "")}/${rel}`;
+      try {
+        const mod = await import(/* @vite-ignore */ entryUrl);
+        if (mod) {
+          console.log(
+            `[devmode] Loaded remote module from: ${entryUrl} (attempt ${attempt})`,
+          );
+          return mod;
+        }
+      } catch (e) {
+        // ignore; try next candidate
+      }
+    }
+    if (attempt < maxRetries) {
+      console.log(
+        `[devmode] Module not found, retrying... (attempt ${attempt + 1}/${maxRetries})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, initialDelay * attempt));
+    }
+  }
+  const errorMsg = `No remote dev entry found at ${baseUrl}. Tried: ${candidates.join(", ")}`;
+  console.error(errorMsg);
+  return null;
 }
 
 /** Update dev mode indicator */

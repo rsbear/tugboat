@@ -1,7 +1,9 @@
+use notify::{RecursiveMode, Watcher};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
@@ -18,6 +20,8 @@ pub struct DevServerManager {
 struct DevState {
     current_alias: Option<String>,
     child: Option<Child>,
+    // File watcher to trigger remount events in dev
+    watcher: Option<notify::RecommendedWatcher>,
     temp_vite_config: Option<PathBuf>,
     temp_svelte_config: Option<PathBuf>,
     project_dir: Option<PathBuf>,
@@ -65,20 +69,38 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
     let (_clone_root, app_dir) = find_clone_directory(&manager.app_handle, &alias).await?;
 
     // Determine project directory (where package.json lives)
-    ensure_tool("node", &["--version"]).await?;
-    ensure_tool("npm", &["--version"]).await?;
-    ensure_tool("npx", &["--version"]).await?;
-
+    // Determine project directory (where package.json lives)
     let project_dir = if app_dir.join("package.json").exists() {
         app_dir.clone()
     } else {
         find_package_json_dir(&app_dir)?
     };
 
+    // Detect package manager and ensure tools are available
+    let package_manager = detect_package_manager(&project_dir);
+    ensure_tool("node", &["--version"]).await?;
+    match package_manager {
+        "npm" => {
+            ensure_tool("npm", &["--version"]).await?;
+            ensure_tool("npx", &["--version"]).await?;
+        }
+        "deno" => ensure_tool("deno", &["--version"]).await?,
+        "bun" => ensure_tool("bun", &["--version"]).await?,
+        _ => {
+            ensure_tool("npm", &["--version"]).await?;
+            ensure_tool("npx", &["--version"]).await?;
+        }
+    }
+
     // Ensure deps installed once
     let node_modules = project_dir.join("node_modules");
     if !node_modules.exists() {
-        run("npm", &["install"], Some(&project_dir)).await?;
+        match package_manager {
+            "npm" => run("npm", &["install"], Some(&project_dir)).await?,
+            "deno" => {} // Deno doesn't need install step
+            "bun" => run("bun", &["install"], Some(&project_dir)).await?,
+            _ => run("npm", &["install"], Some(&project_dir)).await?,
+        }
     }
 
     // Read package.json and detect framework
@@ -87,25 +109,76 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
         detect_framework(&pkg).map_err(|e| format!("Framework detection failed: {}", e))?;
 
     // Ensure vite and framework plugin present
-    run("npm", &["install", "-D", "vite"], Some(&project_dir)).await?;
-    match framework.as_str() {
-        "svelte" => {
-            run(
-                "npm",
-                &["install", "-D", "@sveltejs/vite-plugin-svelte"],
-                Some(&project_dir),
-            )
-            .await?;
+    match package_manager {
+        "npm" => {
+            run("npm", &["install", "-D", "vite"], Some(&project_dir)).await?;
+            match framework.as_str() {
+                "svelte" => {
+                    run(
+                        "npm",
+                        &["install", "-D", "@sveltejs/vite-plugin-svelte"],
+                        Some(&project_dir),
+                    )
+                    .await?;
+                }
+                "react" => {
+                    run(
+                        "npm",
+                        &["install", "-D", "@vitejs/plugin-react"],
+                        Some(&project_dir),
+                    )
+                    .await?;
+                }
+                _ => {}
+            }
         }
-        "react" => {
-            run(
-                "npm",
-                &["install", "-D", "@vitejs/plugin-react"],
-                Some(&project_dir),
-            )
-            .await?;
+        "bun" => {
+            run("bun", &["add", "-d", "vite"], Some(&project_dir)).await?;
+            match framework.as_str() {
+                "svelte" => {
+                    run(
+                        "bun",
+                        &["add", "-d", "@sveltejs/vite-plugin-svelte"],
+                        Some(&project_dir),
+                    )
+                    .await?;
+                }
+                "react" => {
+                    run(
+                        "bun",
+                        &["add", "-d", "@vitejs/plugin-react"],
+                        Some(&project_dir),
+                    )
+                    .await?;
+                }
+                _ => {}
+            }
         }
-        _ => {}
+        "deno" => {
+            // Deno uses import maps or deps.ts, no install needed
+        }
+        _ => {
+            run("npm", &["install", "-D", "vite"], Some(&project_dir)).await?;
+            match framework.as_str() {
+                "svelte" => {
+                    run(
+                        "npm",
+                        &["install", "-D", "@sveltejs/vite-plugin-svelte"],
+                        Some(&project_dir),
+                    )
+                    .await?;
+                }
+                "react" => {
+                    run(
+                        "npm",
+                        &["install", "-D", "@vitejs/plugin-react"],
+                        Some(&project_dir),
+                    )
+                    .await?;
+                }
+                _ => {}
+            }
+        }
     }
 
     // Resolve tugboats entry
@@ -194,17 +267,49 @@ export default config;
         .await
         .map_err(|e| format!("Failed to write vite.config.mjs: {}", e))?;
 
-    // Choose dev command (force vite with our config)
-    let (cmd, mut args) = (
-        "npx".to_string(),
-        vec![
-            "--yes".to_string(),
-            "vite".to_string(),
-            "dev".to_string(),
-            "--config".to_string(),
-            "vite.config.mjs".to_string(),
-        ],
-    );
+    // Choose dev command based on detected package manager
+    let (cmd, args) = match package_manager {
+        "npm" => (
+            "npx".to_string(),
+            vec![
+                "--yes".to_string(),
+                "vite".to_string(),
+                "dev".to_string(),
+                "--config".to_string(),
+                "vite.config.mjs".to_string(),
+            ],
+        ),
+        "deno" => (
+            "deno".to_string(),
+            vec![
+                "run".to_string(),
+                "--allow-all".to_string(),
+                "npm:vite".to_string(),
+                "dev".to_string(),
+                "--config".to_string(),
+                "vite.config.mjs".to_string(),
+            ],
+        ),
+        "bun" => (
+            "bunx".to_string(),
+            vec![
+                "vite".to_string(),
+                "dev".to_string(),
+                "--config".to_string(),
+                "vite.config.mjs".to_string(),
+            ],
+        ),
+        _ => (
+            "npx".to_string(),
+            vec![
+                "--yes".to_string(),
+                "vite".to_string(),
+                "dev".to_string(),
+                "--config".to_string(),
+                "vite.config.mjs".to_string(),
+            ],
+        ),
+    };
 
     // Spawn child
     let mut child = Command::new(&cmd)
@@ -255,11 +360,44 @@ export default config;
         });
     }
 
+    // ----- START: Add File Watcher Logic -----
+    let app_handle_clone = manager.app_handle.clone();
+    let alias_clone = alias.clone();
+    let mut watcher =
+        notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| match res {
+            Ok(event) => {
+                if event.kind.is_modify() || event.kind.is_create() {
+                    let should_remount = event.paths.iter().any(|path| {
+                        path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .map_or(false, |ext| {
+                                matches!(ext, "js" | "ts" | "jsx" | "tsx" | "svelte" | "css")
+                            })
+                    });
+                    if should_remount {
+                        println!(
+                            "[Dev Watcher] Detected change, emitting remount event for '{}'",
+                            &alias_clone
+                        );
+                        let _ = app_handle_clone.emit("dev:remount", &alias_clone);
+                    }
+                }
+            }
+            Err(e) => eprintln!("[Dev Watcher] Watch error: {:?}", e),
+        })
+        .map_err(|e| format!("Failed to create file watcher: {}", e))?;
+
+    watcher
+        .watch(project_dir.as_path(), RecursiveMode::Recursive)
+        .map_err(|e| format!("Failed to start file watcher: {}", e))?;
+    // ----- END: Add File Watcher Logic -----
+
     // Update state
     {
         let mut st = manager.inner.lock().unwrap();
         st.current_alias = Some(alias);
         st.child = Some(child);
+        st.watcher = Some(watcher);
         st.temp_vite_config = Some(temp_config_path);
         st.temp_svelte_config = created_svelte_config;
         st.project_dir = Some(project_dir);
@@ -271,13 +409,20 @@ export default config;
 #[tauri::command]
 pub async fn stop_dev(manager: State<'_, DevServerManager>) -> Result<(), String> {
     let mut child_opt = None;
+    let mut watcher_opt = None;
     {
         let mut st = manager.inner.lock().unwrap();
         if let Some(mut child) = st.child.take() {
             child_opt = Some(child);
         }
+        if let Some(watcher) = st.watcher.take() {
+            watcher_opt = Some(watcher);
+        }
         st.current_alias = None;
     }
+
+    // Explicitly drop the watcher outside the lock to stop it
+    drop(watcher_opt);
 
     if let Some(mut child) = child_opt {
         // Try graceful kill; fallback to force kill
@@ -312,17 +457,33 @@ pub async fn dev_status(manager: State<'_, DevServerManager>) -> Result<serde_js
 }
 
 // Unused after config injection, but kept for potential future use
-async fn detect_dev_command(_app_dir: &Path) -> Result<(String, Vec<String>), String> {
-    Ok((
-        "npx".into(),
-        vec![
-            "--yes".into(),
-            "vite".into(),
-            "dev".into(),
-            "--config".into(),
-            "vite.config.mjs".into(),
-        ],
-    ))
+async fn detect_dev_command(app_dir: &Path) -> Result<(String, Vec<String>), String> {
+    let package_manager = detect_package_manager(app_dir);
+
+    match package_manager {
+        "npm" => Ok((
+            "npx".into(),
+            vec![
+                "--yes".into(),
+                "vite".into(),
+                "dev".into(),
+                "--config".into(),
+                "vite.config.mjs".into(),
+            ],
+        )),
+        "deno" => Ok(("deno".into(), vec!["task".into(), "dev".into()])),
+        "bun" => Ok(("bun".into(), vec!["run".into(), "dev".into()])),
+        _ => Ok((
+            "npx".into(),
+            vec![
+                "--yes".into(),
+                "vite".into(),
+                "dev".into(),
+                "--config".into(),
+                "vite.config.mjs".into(),
+            ],
+        )),
+    }
 }
 
 async fn find_clone_directory(_app: &AppHandle, alias: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -488,6 +649,15 @@ fn resolve_tugboats_entry(repo_dir: &Path) -> Option<String> {
         }
     }
     None
+}
+
+fn detect_package_manager(project_dir: &Path) -> &'static str {
+    match () {
+        _ if project_dir.join("package-lock.json").exists() => "npm",
+        _ if project_dir.join("deno.lock").exists() => "deno",
+        _ if project_dir.join("bun.lock").exists() => "bun",
+        _ => "npm", // default fallback
+    }
 }
 
 fn find_package_json_dir(project_dir: &Path) -> Result<PathBuf, String> {

@@ -88,14 +88,14 @@ async fn clone_repo(
 #[tauri::command]
 async fn clone_app(
     github_url: String,
-    #[allow(non_snake_case)] gitProtocol: String,
+    git_protocol: String,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     // Parse the GitHub URL (HTTPS forms)
     let parsed = GitUrl::parse_https(&github_url)?;
 
     // Choose clone URL based on explicit protocol argument
-    let proto = gitProtocol.to_lowercase();
+    let proto = git_protocol.to_lowercase();
     let clone_url = if proto == "ssh" {
         parsed.ssh_url()
     } else {

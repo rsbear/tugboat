@@ -4,7 +4,8 @@
         <meta charset="UTF-8" />
         <link rel="stylesheet" href="styles.css" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Tauri App</title>
+        <title>Tugboats</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
         <script type="importmap">
             {
                 "imports": {
@@ -19,17 +20,25 @@
     </head>
 
     <body>
-        <main class="container">
-            <form class="row" id="the-input-form">
-                <input
-                    id="the-input"
-                    placeholder="..."
-                    autocapitalize="off"
-                    autocomplete="off"
-                    autocorrect="off"
-                />
-                <button type="submit">Greet</button>
-            </form>
+        <main class="w-full flex flex-col">
+            <div class="w-full flex items-center bg-green-400">
+                <form class="flex-1 flex" id="the-input-form">
+                    <input
+                        id="the-input"
+                        class="flex-1"
+                        placeholder="..."
+                        autocapitalize="off"
+                        autocomplete="off"
+                        autocorrect="off"
+                    />
+                    <button class="flex-0 justify-self-end" type="submit">
+                        Greet
+                    </button>
+                </form>
+                <div id="flex-0 hints-slot">
+                    <span>hints</span>
+                </div>
+            </div>
             <p id="greet-msg"></p>
 
             <div id="tugboats-slot"></div>

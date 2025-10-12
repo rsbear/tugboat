@@ -10,7 +10,7 @@ import {
 
 const { invoke } = window.__TAURI__.core;
 
-let greetInputEl;
+let theInputEl;
 let greetMsgEl;
 let listBtnEl;
 let tugboatsSlot;
@@ -29,11 +29,15 @@ async function refreshPreferencesAliasMap() {
     const prefs = stored.result.value;
     if (prefs && Array.isArray(prefs.apps)) {
       for (const app of prefs.apps) {
-        if (app && app.alias) m.set(app.alias.trim(), true);
+        if (app && app.alias) {
+          const trimmedAlias = app.alias.trim();
+          m.set(trimmedAlias, true);
+        }
       }
     }
   }
   appAliasMap = m;
+  console.log("🔍 DEBUG: Final appAliasMap:", Array.from(appAliasMap.keys()));
 }
 
 async function refreshCloneAliasSet() {
@@ -58,9 +62,14 @@ function parseAlias(raw) {
 }
 
 async function mountTugboatForAlias(alias) {
-  if (!alias) return;
+  if (!alias) {
+    console.log("🔍 DEBUG: No alias provided, returning");
+    return;
+  }
   // If same alias is already mounted, nothing to do
-  if (currentMounted.alias === alias) return;
+  if (currentMounted.alias === alias) {
+    return;
+  }
 
   // Unmount previous (best-effort)
   if (currentMounted.cleanup) {
@@ -73,18 +82,26 @@ async function mountTugboatForAlias(alias) {
   if (tugboatsSlot) tugboatsSlot.innerHTML = "";
 
   try {
+    console.log("🔍 DEBUG: Invoking latest_bundle_for_alias with:", alias);
     // Find latest bundle for alias
     const path = await invoke("latest_bundle_for_alias", { alias });
+    console.log("🔍 DEBUG: Bundle path received:", path);
+
     const code = await invoke("read_text_file", { path });
+    console.log("🔍 DEBUG: Bundle code length:", code?.length || 0);
 
     // Import the ESM bundle via blob URL
     const blob = new Blob([code], { type: "text/javascript" });
     const url = URL.createObjectURL(blob);
+    console.log("🔍 DEBUG: Created blob URL:", url);
+
     const mod = await import(url);
+    console.log("🔍 DEBUG: Module imported, exports:", Object.keys(mod));
 
     const slot = tugboatsSlot;
     let cleanup = null;
     if (mod && typeof mod.harborMount === "function") {
+      console.log("🔍 DEBUG: Using harborMount");
       // Harbor-style exports
       mod.harborMount(slot);
       if (typeof mod.unmount === "function") {
@@ -95,12 +112,15 @@ async function mountTugboatForAlias(alias) {
         };
       }
     } else if (mod && typeof mod.tugboatReact === "function") {
+      console.log("🔍 DEBUG: Using tugboatReact");
       const res = mod.tugboatReact(slot);
       if (typeof res === "function") cleanup = res;
     } else if (mod && typeof mod.tugboatSvelte === "function") {
+      console.log("🔍 DEBUG: Using tugboatSvelte");
       const res = mod.tugboatSvelte(slot);
       if (typeof res === "function") cleanup = res;
     } else if (mod && typeof mod.default === "function") {
+      console.log("🔍 DEBUG: Using default export");
       const res = mod.default(slot);
       if (typeof res === "function") cleanup = res;
     } else {
@@ -111,13 +131,14 @@ async function mountTugboatForAlias(alias) {
     }
 
     currentMounted = { alias, cleanup };
+    console.log("🔍 DEBUG: Successfully mounted tugboat for alias:", alias);
   } catch (err) {
     console.error("Failed to mount tugboat app for alias", alias, err);
   }
 }
 
 async function greet() {
-  const raw = greetInputEl.value;
+  const raw = theInputEl.value;
   input.set(raw);
   const msg = await invoke("greet", { name: raw });
   greetMsgEl.textContent = msg;
@@ -131,14 +152,14 @@ async function listInputSubmissions() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  greetInputEl = document.querySelector("#the-input");
+  theInputEl = document.querySelector("#the-input");
   greetMsgEl = document.querySelector("#greet-msg");
   tugboatsSlot = document.querySelector("#tugboats-slot");
 
   await refreshPreferencesAliasMap();
   await refreshCloneAliasSet();
 
-  greetInputEl.addEventListener("input", (e) => {
+  theInputEl.addEventListener("input", (e) => {
     input.set(e.target.value);
   });
 
@@ -154,13 +175,21 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     const alias = parseAlias(s.raw);
+    console.log("🔍 DEBUG: Parsed alias:", alias, "from input:", s.raw);
 
     // Refresh maps opportunistically
     await refreshPreferencesAliasMap();
     await refreshCloneAliasSet();
 
+    console.log(
+      "🔍 DEBUG: appAliasMap contains:",
+      Array.from(appAliasMap.keys()),
+    );
+    console.log("🔍 DEBUG: cloneAliasSet contains:", Array.from(cloneAliasSet));
+
     // Auto dev: if alias is a clone alias, start dev mode
     if (alias && cloneAliasSet.has(alias)) {
+      console.log("🔍 DEBUG: Starting dev mode for clone alias:", alias);
       await startDevModeForAlias(alias);
       return;
     }
@@ -172,10 +201,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     if (alias && appAliasMap.has(alias)) {
+      console.log("🔍 DEBUG: Found app alias, mounting tugboat for:", alias);
       await mountTugboatForAlias(alias);
     } else {
+      console.log(
+        "🔍 DEBUG: No app alias match found for:",
+        alias,
+        "or alias is empty",
+      );
       // If current mount is not represented by alias anymore, clear
       if (currentMounted.alias) {
+        console.log("🔍 DEBUG: Clearing current mount:", currentMounted.alias);
         if (currentMounted.cleanup) {
           try {
             currentMounted.cleanup();
