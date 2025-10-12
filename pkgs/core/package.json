@@ -18,8 +18,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
-    "prepublishOnly": "npm run build"
+    "build": "tsup"
   },
   "devDependencies": {
     "tsup": "^8.5.0",
