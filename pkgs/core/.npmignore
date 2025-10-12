@@ -1,0 +1,37 @@
+# Source files
+src/
+
+# Build configuration
+tsconfig.json
+tsup.config.ts
+
+# Development files
+deno.lock
+
+# Test files
+*.test.*
+*.spec.*
+__tests__/
+test/
+
+# Documentation that's not needed in package
+*.md
+!README.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp

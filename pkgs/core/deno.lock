@@ -1,7 +1,6 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@tauri-apps/api@^2.8.0": "2.8.0",
     "npm:tsup@^8.5.0": "8.5.0_esbuild@0.25.10_typescript@5.9.2",
     "npm:typescript@^5.9.2": "5.9.2"
   },
@@ -279,9 +278,6 @@
       "integrity": "sha512-6iKDCVSIUQ8jPMoIV0OytRKniaYyy5EbY/RRydmLW8ZR3cEBhxbWl5ro0rkUNe0ef6sScvhbY79HrjRm8i3vDQ==",
       "os": ["win32"],
       "cpu": ["x64"]
-    },
-    "@tauri-apps/api@2.8.0": {
-      "integrity": "sha512-ga7zdhbS2GXOMTIZRT0mYjKJtR9fivsXzsyq5U3vjDL0s6DTMwYRm0UHNjzTY5dh4+LSC68Sm/7WEiimbQNYlw=="
     },
     "@types/estree@1.0.8": {
       "integrity": "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="
@@ -789,7 +785,6 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@tauri-apps/api@^2.8.0",
         "npm:tsup@^8.5.0",
         "npm:typescript@^5.9.2"
       ]

@@ -1,14 +1,45 @@
 {
   "name": "@tugboats/core",
   "version": "0.0.10",
+  "description": "Core SDK for Tugboats - a host/runtime for pluggable web applications",
   "license": "(MIT OR Apache-2.0)",
   "type": "module",
-  "scripts": {
-    "build": "tsup"
+  "main": "./dist/mod.js",
+  "module": "./dist/mod.js",
+  "types": "./dist/mod.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mod.d.ts",
+      "import": "./dist/mod.js"
+    }
   },
-  "dependencies": {
-    "@tauri-apps/api": "^2.8.0",
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
     "tsup": "^8.5.0",
     "typescript": "^5.9.2"
+  },
+  "keywords": [
+    "tugboats",
+    "plugin",
+    "runtime",
+    "tauri",
+    "reactive",
+    "kv-store"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/goodtime/tugboats",
+    "directory": "pkgs/core"
+  },
+  "homepage": "https://github.com/goodtime/tugboats",
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
