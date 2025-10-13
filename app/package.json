@@ -11,6 +11,11 @@
     "preview": "rsbuild preview",
     "tauri": "tauri"
   },
+  "dependencies": {
+    "@solidjs/meta": "^0.29.4",
+    "@tauri-apps/api": "^2.8.0",
+    "smol-toml": "^1.4.2"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.2.5",
     "@rsbuild/core": "^1.5.17",
@@ -18,13 +23,10 @@
     "@rsbuild/plugin-solid": "^1.0.6",
     "@tauri-apps/cli": "^2.8.4",
     "@tugboats/core": "^0.0.10",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "modern-monaco": "^0.2.2"
   },
   "peerDependencies": {
     "typescript": "^5"
-  },
-  "dependencies": {
-    "@solidjs/meta": "^0.29.4",
-    "smol-toml": "^1.4.2"
   }
 }
