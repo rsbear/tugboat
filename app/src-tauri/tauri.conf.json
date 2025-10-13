@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.tugboats.app",
   "build": {
-    "frontendDist": "../src"
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,

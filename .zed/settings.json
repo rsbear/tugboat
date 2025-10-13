@@ -1,32 +1,33 @@
 {
-  // "code_actions_on_format": {
-  //   "source.organizeImports.biome": true,
-  //   "source.fixAll.biome": true
-  // },
+  "code_actions_on_format": {
+    "source.organizeImports.biome": true,
+    "source.fixAll.biome": true
+  },
 
   "lsp": {
     "deno": {
       "settings": {
         "deno": {
-          "enable": true
+          "enable": false
         }
       }
     }
   },
   "languages": {
     "JavaScript": {
-      "language_servers": ["deno", "!vtsls", "!biome", "!eslint"],
-      "formatter": "language_server"
+      "language_servers": ["!deno", "vtsls", "biome", "!eslint"],
+      // "formatter": "language_server"
+      "formatter": { "language_server": { "name": "biome" } }
     },
     "TypeScript": {
-      "language_servers": ["deno", "!vtsls", "!biome", "!eslint"],
-      // "formatter": { "language_server": { "name": "biome" } }
-      "formatter": "language_server"
+      "language_servers": ["!deno", "vtsls", "biome", "!eslint"],
+      "formatter": { "language_server": { "name": "biome" } }
+      // "formatter": "language_server"
     },
     "TSX": {
-      "language_servers": ["deno", "!vtsls", "!biome", "!eslint"],
-      // "formatter": { "language_server": { "name": "biome" } }
-      "formatter": "language_server"
+      "language_servers": ["!deno", "vtsls", "biome", "!eslint"],
+      "formatter": { "language_server": { "name": "biome" } }
+      // "formatter": "language_server"
     }
   }
 }

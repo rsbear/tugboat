@@ -4,16 +4,27 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "build": "rsbuild build",
+    "check": "biome check --write",
+    "dev": "rsbuild dev",
+    "format": "biome format --write",
+    "preview": "rsbuild preview",
     "tauri": "tauri"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.2.5",
+    "@rsbuild/core": "^1.5.17",
+    "@rsbuild/plugin-babel": "^1.0.6",
+    "@rsbuild/plugin-solid": "^1.0.6",
     "@tauri-apps/cli": "^2.8.4",
+    "@tugboats/core": "^0.0.10",
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@solidjs/meta": "^0.29.4",
     "smol-toml": "^1.4.2"
   }
 }
