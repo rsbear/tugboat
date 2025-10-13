@@ -9,7 +9,7 @@ In the case above, 'websearch' is the tugboat application alias 'risotto recipes
 ### Features
 - [x] Configure the host via TOML
 - [x] Host bundles apps from GitHub URLs via Vite
-- [ ] Host automatically starts/stops a Vite dev instance for clone aliases
+- [x] Host automatically watches clone aliases and rebundles and reloads on filesaves
 
 ### Tugboat Preferences Docs (INCOMPLETE)
 **tugboat** (base config)
