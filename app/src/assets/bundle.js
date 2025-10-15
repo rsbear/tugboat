@@ -41994,7 +41994,7 @@ Reflect.set(globalThis, "MonacoEnvironment", {
   builtinLSP: true
 });
 
-// src/lib.tsx
+// src/common/Monaco.tsx
 var MonacoCtx = Q(null);
 var useMonacoCtx = () => {
   const c4 = x2(MonacoCtx);
@@ -43017,6 +43017,92 @@ function AppPreferencesCtxProvider(props) {
     children: props.children
   });
 }
+async function handleRepositoryCloning(clones, gitProtocol) {
+  const unlisten = await window.__TAURI__.event.listen("tugboats://clone-progress", (event) => {
+    console.log("Clone progress:", event.payload);
+  });
+  try {
+    console.log(`\u{1F4CB} Found ${clones.length} repositories to process`);
+    for (let i5 = 0; i5 < clones.length; i5++) {
+      const clone2 = clones[i5];
+      if (!clone2.github_url) {
+        console.warn(`\u26A0\uFE0F Skipping entry ${i5 + 1}: missing github_url`, clone2);
+        continue;
+      }
+      const dirPath = clone2.dir || "~/tugboat_apps";
+      const repoName = clone2.alias || extractRepoNameFromUrl(clone2.github_url);
+      console.log(`[${i5 + 1}/${clones.length}] Processing: ${repoName}`);
+      console.log(`\u{1F4C2} Target directory: ${dirPath}`);
+      try {
+        await window.__TAURI__.core.invoke("clone_repo", {
+          githubUrl: clone2.github_url,
+          dirPath,
+          gitProtocol: gitProtocol || "https"
+        });
+        console.log(`\u2705 Completed: ${repoName}`);
+      } catch (error) {
+        console.error(`\u274C Failed to clone ${repoName}:`, error);
+      }
+    }
+  } finally {
+    unlisten();
+  }
+}
+async function handleAppsCloning(apps, gitProtocol) {
+  const unlisten = await window.__TAURI__.event.listen("tugboats://clone-progress", (event) => {
+    console.log("Apps clone progress:", event.payload);
+  });
+  try {
+    console.log(`\u{1F4CB} Found ${apps.length} apps to process`);
+    for (let i5 = 0; i5 < apps.length; i5++) {
+      const app = apps[i5];
+      if (!app.github_url) {
+        console.warn(`\u26A0\uFE0F Skipping app ${i5 + 1}: missing github_url`, app);
+        continue;
+      }
+      let parsedInfo;
+      try {
+        parsedInfo = await window.__TAURI__.core.invoke("parse_github_url", {
+          githubUrl: app.github_url
+        });
+      } catch (e4) {
+        console.log(`\u274C Failed to parse app URL:`, e4);
+        continue;
+      }
+      const repoName = parsedInfo.repo;
+      const repoRootDir = `~/.tugboats/tmp/${repoName}`;
+      console.log(`[${i5 + 1}/${apps.length}] Processing app: ${repoName}`);
+      console.log(`\u{1F4C2} Repo clone target: ${repoRootDir}`);
+      try {
+        await window.__TAURI__.core.invoke("clone_app", {
+          githubUrl: app.github_url,
+          gitProtocol: gitProtocol || "https"
+        });
+        console.log(`\u2705 Completed app clone: ${repoName}`);
+        console.log(`\u{1F6E0}\uFE0F Bundling app at ${repoRootDir} ...`);
+        const bundleAlias = app.alias || repoName;
+        const bundlePath = await window.__TAURI__.core.invoke("bundle_app", {
+          appDir: repoRootDir,
+          alias: bundleAlias,
+          githubUrl: app.github_url
+        });
+        console.log(`\u{1F4E6} Bundle ready: ${bundlePath}`);
+      } catch (error) {
+        console.error(`\u274C Failed to process app ${repoName}:`, error);
+      }
+    }
+  } finally {
+    unlisten();
+  }
+}
+function extractRepoNameFromUrl(url) {
+  try {
+    const match = url.match(/github\.com[/:]([\w-]+)\/([\w.-]+)/);
+    return match ? match[2].replace(".git", "") : url;
+  } catch {
+    return url;
+  }
+}
 function PrefsEditor() {
   const { appPrefs, setPrefs, loadPrefsFromKv } = x2(PrefsCtx);
   const editorValue = useEditorValue(stringify4(appPrefs), "toml");
@@ -43029,6 +43115,17 @@ function PrefsEditor() {
       ], parsed);
       setPrefs(parsed);
       await loadPrefsFromKv();
+      const gitProtocol = parsed?.tugboat?.git_protocol || "https";
+      if (parsed.clones && Array.isArray(parsed.clones)) {
+        console.log("\u{1F680} Starting repository cloning process...");
+        await handleRepositoryCloning(parsed.clones, gitProtocol);
+        console.log("\u2705 Repository cloning process completed!");
+      }
+      if (parsed.apps && Array.isArray(parsed.apps)) {
+        console.log("\u{1F680} Starting apps cloning into ~/.tugboats/tmp ...");
+        await handleAppsCloning(parsed.apps, gitProtocol);
+        console.log("\u2705 Apps cloning completed!");
+      }
     } catch (err) {
       console.error("\u274C Invalid TOML", err);
     }

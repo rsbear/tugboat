@@ -1,15 +1,13 @@
 import { kvTable } from "npm:@tugboats/core";
-import { Editor, useEditor, useEditorValue, useMonacoCtx } from "./lib.tsx";
-import { signal } from "@preact/signals";
+import type { ComponentChildren } from "preact";
 import {
   createContext,
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "preact/compat";
-import { ComponentChildren } from "preact";
+import { Editor, useEditorValue } from "./common/Monaco.tsx";
 import * as toml from "npm:smol-toml";
 
 // -- Alias Map used for controlling rendering
@@ -115,6 +113,116 @@ export function AppPreferencesCtxProvider(
   );
 }
 
+// Helper functions for cloning
+
+async function handleRepositoryCloning(clones: any[], gitProtocol: string) {
+  const unlisten = await window.__TAURI__.event.listen(
+    "tugboats://clone-progress",
+    (event: any) => {
+      console.log("Clone progress:", event.payload);
+    },
+  );
+
+  try {
+    console.log(`📋 Found ${clones.length} repositories to process`);
+
+    for (let i = 0; i < clones.length; i++) {
+      const clone = clones[i];
+
+      if (!clone.github_url) {
+        console.warn(`⚠️ Skipping entry ${i + 1}: missing github_url`, clone);
+        continue;
+      }
+
+      const dirPath = clone.dir || "~/tugboat_apps";
+      const repoName = clone.alias || extractRepoNameFromUrl(clone.github_url);
+
+      console.log(`[${i + 1}/${clones.length}] Processing: ${repoName}`);
+      console.log(`📂 Target directory: ${dirPath}`);
+
+      try {
+        await window.__TAURI__.core.invoke("clone_repo", {
+          githubUrl: clone.github_url,
+          dirPath: dirPath,
+          gitProtocol: gitProtocol || "https",
+        });
+        console.log(`✅ Completed: ${repoName}`);
+      } catch (error) {
+        console.error(`❌ Failed to clone ${repoName}:`, error);
+      }
+    }
+  } finally {
+    unlisten();
+  }
+}
+
+async function handleAppsCloning(apps: any[], gitProtocol: string) {
+  const unlisten = await window.__TAURI__.event.listen(
+    "tugboats://clone-progress",
+    (event: any) => {
+      console.log("Apps clone progress:", event.payload);
+    },
+  );
+
+  try {
+    console.log(`📋 Found ${apps.length} apps to process`);
+
+    for (let i = 0; i < apps.length; i++) {
+      const app = apps[i];
+
+      if (!app.github_url) {
+        console.warn(`⚠️ Skipping app ${i + 1}: missing github_url`, app);
+        continue;
+      }
+
+      let parsedInfo;
+      try {
+        parsedInfo = await window.__TAURI__.core.invoke("parse_github_url", {
+          githubUrl: app.github_url,
+        });
+      } catch (e) {
+        console.log(`❌ Failed to parse app URL:`, e);
+        continue;
+      }
+      const repoName = parsedInfo.repo;
+      const repoRootDir = `~/.tugboats/tmp/${repoName}`;
+
+      console.log(`[${i + 1}/${apps.length}] Processing app: ${repoName}`);
+      console.log(`📂 Repo clone target: ${repoRootDir}`);
+
+      try {
+        await window.__TAURI__.core.invoke("clone_app", {
+          githubUrl: app.github_url,
+          gitProtocol: gitProtocol || "https",
+        });
+        console.log(`✅ Completed app clone: ${repoName}`);
+
+        console.log(`🛠️ Bundling app at ${repoRootDir} ...`);
+        const bundleAlias = app.alias || repoName;
+        const bundlePath = await window.__TAURI__.core.invoke("bundle_app", {
+          appDir: repoRootDir,
+          alias: bundleAlias,
+          githubUrl: app.github_url,
+        });
+        console.log(`📦 Bundle ready: ${bundlePath}`);
+      } catch (error) {
+        console.error(`❌ Failed to process app ${repoName}:`, error);
+      }
+    }
+  } finally {
+    unlisten();
+  }
+}
+
+function extractRepoNameFromUrl(url: string) {
+  try {
+    const match = url.match(/github\.com[/:]([\w-]+)\/([\w.-]+)/);
+    return match ? match[2].replace(".git", "") : url;
+  } catch {
+    return url;
+  }
+}
+
 export function PrefsEditor() {
   const { appPrefs, setPrefs, loadPrefsFromKv } = useContext(PrefsCtx);
   const editorValue = useEditorValue(toml.stringify(appPrefs), "toml");
@@ -126,6 +234,23 @@ export function PrefsEditor() {
       await prefsKv.set(["user"], parsed);
       setPrefs(parsed);
       await loadPrefsFromKv();
+
+      // Get git protocol from prefs (fallback to https)
+      const gitProtocol = parsed?.tugboat?.git_protocol || "https";
+
+      // Handle repository cloning for 'clones'
+      if (parsed.clones && Array.isArray(parsed.clones)) {
+        console.log("🚀 Starting repository cloning process...");
+        await handleRepositoryCloning(parsed.clones, gitProtocol);
+        console.log("✅ Repository cloning process completed!");
+      }
+
+      // Clone apps into ~/.tugboat/tmp
+      if (parsed.apps && Array.isArray(parsed.apps)) {
+        console.log("🚀 Starting apps cloning into ~/.tugboats/tmp ...");
+        await handleAppsCloning(parsed.apps, gitProtocol);
+        console.log("✅ Apps cloning completed!");
+      }
     } catch (err) {
       console.error("❌ Invalid TOML", err);
     }

@@ -1,11 +1,11 @@
 import { render } from "npm:preact";
 import { Suspense } from "npm:preact/compat";
-import { type ComponentChildren } from "preact";
+import type { ComponentChildren } from "preact";
 
 import { input } from "npm:@tugboats/core";
 
 import { signal } from "@preact/signals";
-import { MonacoCtxProvider } from "./lib.tsx";
+import { MonacoCtxProvider } from "./common/Monaco.tsx";
 import {
   AppPreferencesCtxProvider,
   PrefsEditor,

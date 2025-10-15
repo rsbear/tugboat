@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "preact/compat";
-import { ComponentChildren, RefObject } from "preact";
+import type { ComponentChildren } from "preact";
 
 // -- Monaco Editor Context
 
@@ -123,43 +123,3 @@ export const Editor = forwardRef<
     />
   );
 });
-
-export const MonacoEditor = (
-  props: {
-    code: string;
-    lang: Langs;
-    onChange?: (code: string) => void;
-  },
-) => {
-  const monaco = useMonacoCtx();
-  const editorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!monaco) throw new Error("no monaco");
-    if (!editorRef.current) return;
-
-    const editor = monaco.editor.create(editorRef.current);
-    editor.setModel(
-      monaco.editor.createModel(props.code, props.lang),
-    );
-
-    if (props.onChange) {
-      editor.onDidChangeModelContent(() => {
-        props.onChange?.(editor.getValue());
-      });
-    }
-
-    return () => {
-      editor.dispose();
-    };
-  }, [monaco]);
-
-  return (
-    <div
-      style={{ height: "400px" }}
-      class="w-full"
-      id="monaco-editor"
-      ref={editorRef}
-    />
-  );
-};

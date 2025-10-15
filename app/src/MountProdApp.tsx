@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "preact/hooks";
 
+// @ts-ignore - sh
 const { invoke } = window.__TAURI__.core;
 
 export function MountProdApp(props: { alias: string }) {
