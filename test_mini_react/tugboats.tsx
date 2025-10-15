@@ -19,7 +19,7 @@ function App() {
   return (
     <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 animate-fade-in">
       <h1 className="text-2xl font-bold text-white">
-        sup man im really tired of js
+        deno is dope
       </h1>
       <input
         type="text"

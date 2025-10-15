@@ -15,61 +15,10 @@
                 }
             }
         </script>
-        <script type="module" src="/app_input.js" defer></script>
-        <script type="module" src="/app_devmode.js" defer></script>
     </head>
 
     <body>
-        <main class="w-full flex flex-col">
-            <div class="w-full flex items-center bg-green-400">
-                <form class="flex-1 flex" id="the-input-form">
-                    <input
-                        id="the-input"
-                        class="flex-1"
-                        placeholder="..."
-                        autocapitalize="off"
-                        autocomplete="off"
-                        autocorrect="off"
-                    />
-                    <button class="flex-0 justify-self-end" type="submit">
-                        Greet
-                    </button>
-                </form>
-                <div id="flex-0 hints-slot">
-                    <span>hints</span>
-                </div>
-            </div>
-            <p id="greet-msg"></p>
-
-            <div id="tugboats-slot"></div>
-
-            <!-- Dev mode progress area -->
-            <div
-                id="clone-progress"
-                style="
-                    display: none;
-                    background: #1e293b;
-                    color: #e2e8f0;
-                    padding: 12px;
-                    border-radius: 6px;
-                    margin: 16px 0;
-                    font-family: monospace;
-                    font-size: 12px;
-                    max-height: 200px;
-                    overflow-y: auto;
-                "
-            ></div>
-
-            <!-- Monaco editor target -->
-            <div
-                class="editor-container"
-                style="width: 100%; height: 400px; border: 1px solid #ccc"
-            >
-                <div
-                    id="editor"
-                    style="width: 100%; height: 400px; border: 1px solid #ccc"
-                ></div>
-            </div>
-        </main>
+        <div id="root"></div>
+        <script type="module" src="/assets/bundle.js"></script>
     </body>
 </html>

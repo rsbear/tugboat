@@ -11,6 +11,9 @@
           "enable": true
         }
       }
+    },
+    "biome": {
+      "enable_lsp_tasks": false
     }
   },
   "languages": {

@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "tauri": "tauri"
+  },
+  "imports": {
+    "@preact/signals": "npm:@preact/signals@^2.3.2",
+    "@tauri-apps/cli": "npm:@tauri-apps/cli@^2.8.4",
+    "preact": "npm:preact@^10.27.2"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
+  }
+}

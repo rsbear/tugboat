@@ -6,7 +6,7 @@
 </script>
 
 <main>
-    <p>You clicked {count} times.</p>
+    <p>You must have clicked {count} times.</p>
     <button onclick={decrement}>-</button>
     <button onclick={increment}>+</button>
 </main>
