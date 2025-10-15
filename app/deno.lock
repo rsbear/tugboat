@@ -4,6 +4,7 @@
     "npm:@preact/signals@^2.3.2": "2.3.2_preact@10.27.2",
     "npm:@tauri-apps/cli@2.8.4": "2.8.4",
     "npm:@tauri-apps/cli@^2.8.4": "2.8.4",
+    "npm:@tauri-apps/plugin-global-shortcut@^2.3.0": "2.3.0",
     "npm:@tugboats/core@*": "0.0.10",
     "npm:modern-monaco@*": "0.2.2_typescript@5.9.3",
     "npm:preact@*": "10.27.2",
@@ -56,6 +57,9 @@
       "dependencies": [
         "acorn"
       ]
+    },
+    "@tauri-apps/api@2.8.0": {
+      "integrity": "sha512-ga7zdhbS2GXOMTIZRT0mYjKJtR9fivsXzsyq5U3vjDL0s6DTMwYRm0UHNjzTY5dh4+LSC68Sm/7WEiimbQNYlw=="
     },
     "@tauri-apps/cli-darwin-arm64@2.8.4": {
       "integrity": "sha512-BKu8HRkYV01SMTa7r4fLx+wjgtRK8Vep7lmBdHDioP6b8XH3q2KgsAyPWfEZaZIkZ2LY4SqqGARaE9oilNe0oA==",
@@ -128,6 +132,12 @@
         "@tauri-apps/cli-win32-x64-msvc"
       ],
       "bin": true
+    },
+    "@tauri-apps/plugin-global-shortcut@2.3.0": {
+      "integrity": "sha512-WbAz0ElhpP+0kzQZRScdCC7UQ7OPH8PAn//fsBNu7+ywihsnVSVOg1L9YhieAtLNtAlnmFI69Yl5AGaA3ge5IQ==",
+      "dependencies": [
+        "@tauri-apps/api"
+      ]
     },
     "@tugboats/core@0.0.10": {
       "integrity": "sha512-uru1mrOpnGUSHN/49nYe1Td6kcbTzrTvZfbbRre6T9DVBku6B2qkzuQmED1u2xe8gmVu2/2kokWngjPGu9I4cQ=="
@@ -228,6 +238,7 @@
     "dependencies": [
       "npm:@preact/signals@^2.3.2",
       "npm:@tauri-apps/cli@^2.8.4",
+      "npm:@tauri-apps/plugin-global-shortcut@^2.3.0",
       "npm:preact@^10.27.2"
     ]
   }
