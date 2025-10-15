@@ -41,7 +41,11 @@ impl GitUrl {
             .strip_prefix("https://github.com/")
             .ok_or_else(|| "URL must start with https://github.com/".to_string())?;
 
-        let mut parts: Vec<&str> = without_prefix.split('/').filter(|p| !p.is_empty()).collect();
+        let parts: Vec<&str> = without_prefix
+            .split('/')
+            .filter(|p| !p.is_empty())
+            .collect();
+
         if parts.len() < 2 {
             return Err("Expected https://github.com/<owner>/<repo>[...rest]".to_string());
         }
@@ -76,17 +80,25 @@ impl GitUrl {
     }
 
     /// The repo owner (e.g. "rsbear").
-    pub fn owner(&self) -> &str { &self.owner }
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
 
     /// The repo name without .git (e.g. "deleteme").
-    pub fn repo(&self) -> &str { &self.repo }
+    pub fn repo(&self) -> &str {
+        &self.repo
+    }
 
     /// The optional branch (from `/tree/<branch>`), if present.
-    pub fn branch(&self) -> Option<&str> { self.branch.as_deref() }
+    pub fn branch(&self) -> Option<&str> {
+        self.branch.as_deref()
+    }
 
     /// The optional subpath after the branch, if present.
     /// Example: "mini-react-ts" from https://github.com/owner/repo/tree/main/mini-react-ts
-    pub fn subpath(&self) -> Option<&str> { self.subpath.as_deref() }
+    pub fn subpath(&self) -> Option<&str> {
+        self.subpath.as_deref()
+    }
 
     /// The canonical HTTPS base repo URL (without trailing slash or .git)
     /// Example: https://github.com/owner/repo

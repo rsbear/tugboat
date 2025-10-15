@@ -46,18 +46,6 @@ impl DevServerManager {
         }
     }
 
-    fn emit_stdout(&self, line: &str) {
-        let _ = self
-            .app_handle
-            .emit("dev:stdout", &serde_json::json!({ "line": line }));
-    }
-
-    fn emit_url(&self, url: &str) {
-        let _ = self
-            .app_handle
-            .emit("dev:url", &serde_json::json!({ "url": url }));
-    }
-
     fn emit_stopped(&self) {
         let _ = self.app_handle.emit("dev:stopped", &serde_json::json!({}));
     }
@@ -290,7 +278,7 @@ export default config;
 
     // Set up file watcher for JIT builds with channel-based communication
     let (rebuild_tx, mut rebuild_rx) = mpsc::unbounded_channel();
-    
+
     // Clone data for the background rebuild task
     let app_handle_clone = manager.app_handle.clone();
     let alias_clone = alias.clone();
@@ -308,9 +296,7 @@ export default config;
 
             let mgr = DevServerManager {
                 app_handle: app_handle_clone.clone(),
-                inner: std::sync::Arc::new(std::sync::Mutex::new(
-                    DevState::default(),
-                )),
+                inner: std::sync::Arc::new(std::sync::Mutex::new(DevState::default())),
             };
 
             match build_dev_bundle(
@@ -327,10 +313,7 @@ export default config;
                     let _ = app_handle_clone.emit("dev:build_success", &alias_clone);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[Dev Watcher] Build failed for '{}': {}",
-                        &alias_clone, e
-                    );
+                    eprintln!("[Dev Watcher] Build failed for '{}': {}", &alias_clone, e);
                     let _ = app_handle_clone.emit("dev:build_error", (&alias_clone, &e));
                 }
             }
@@ -348,12 +331,13 @@ export default config;
                     if event.kind.is_modify() {
                         let should_build = event.paths.iter().any(|path| {
                             // Ignore changes in .tugboats-dist directory to prevent infinite loops
-                            if path.components().any(|component| {
-                                component.as_os_str() == ".tugboats-dist"
-                            }) {
+                            if path
+                                .components()
+                                .any(|component| component.as_os_str() == ".tugboats-dist")
+                            {
                                 return false;
                             }
-                            
+
                             path.extension()
                                 .and_then(|ext| ext.to_str())
                                 .map_or(false, |ext| {
@@ -519,36 +503,6 @@ pub async fn dev_status(manager: State<'_, DevServerManager>) -> Result<serde_js
     }))
 }
 
-// Unused after config injection, but kept for potential future use
-async fn detect_dev_command(app_dir: &Path) -> Result<(String, Vec<String>), String> {
-    let package_manager = detect_package_manager(app_dir);
-
-    match package_manager {
-        "npm" => Ok((
-            "npx".into(),
-            vec![
-                "--yes".into(),
-                "vite".into(),
-                "dev".into(),
-                "--config".into(),
-                "vite.config.mjs".into(),
-            ],
-        )),
-        "deno" => Ok(("deno".into(), vec!["task".into(), "dev".into()])),
-        "bun" => Ok(("bun".into(), vec!["run".into(), "dev".into()])),
-        _ => Ok((
-            "npx".into(),
-            vec![
-                "--yes".into(),
-                "vite".into(),
-                "dev".into(),
-                "--config".into(),
-                "vite.config.mjs".into(),
-            ],
-        )),
-    }
-}
-
 async fn find_clone_directory(_app: &AppHandle, alias: &str) -> Result<(PathBuf, PathBuf), String> {
     // Read preferences from KV
     let prefs_key = vec!["preferences".to_string(), "user".to_string()];
@@ -607,39 +561,13 @@ async fn find_clone_directory(_app: &AppHandle, alias: &str) -> Result<(PathBuf,
     Err(format!("Clone alias '{}' not found in preferences", alias))
 }
 
-fn extract_first_url(line: &str) -> Option<String> {
-    // Prefer Local: http://localhost:PORT/
-    if let Some(local_idx) = line.find("Local:") {
-        if let Some(i) = line[local_idx..].find("http://") {
-            let start = local_idx + i;
-            return Some(take_until_ws(&line[start..]));
-        }
-    }
-    // Fallback: first http(s) in line
-    if let Some(i) = line.find("http://") {
-        return Some(take_until_ws(&line[i..]));
-    }
-    if let Some(i) = line.find("https://") {
-        return Some(take_until_ws(&line[i..]));
-    }
-    None
-}
-
-fn take_until_ws(s: &str) -> String {
-    s.split_whitespace()
-        .next()
-        .unwrap_or("")
-        .trim_end_matches('\u{200B}')
-        .to_string()
-}
-
 // Helpers copied/adapted from bundler.rs
 #[derive(Debug, Deserialize, Clone, Default)]
 struct PackageJson {
     #[serde(default)]
     dependencies: std::collections::HashMap<String, String>,
     #[serde(default)]
-    devDependencies: std::collections::HashMap<String, String>,
+    dev_dependencies: std::collections::HashMap<String, String>,
 }
 
 async fn ensure_tool(bin: &str, args: &[&str]) -> Result<(), String> {
@@ -691,7 +619,7 @@ async fn read_package_json(project_dir: &Path) -> Result<PackageJson, String> {
 
 fn detect_framework(pkg: &PackageJson) -> Result<String, String> {
     let has = |name: &str| -> bool {
-        pkg.dependencies.contains_key(name) || pkg.devDependencies.contains_key(name)
+        pkg.dependencies.contains_key(name) || pkg.dev_dependencies.contains_key(name)
     };
     if has("svelte") || has("@sveltejs/kit") || has("@sveltejs/vite-plugin-svelte") {
         return Ok("svelte".to_string());

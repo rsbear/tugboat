@@ -1,17 +1,17 @@
+use crate::git_url_parser::GitUrl;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::Emitter;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use crate::git_url_parser::GitUrl;
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct PackageJson {
     #[serde(default)]
     pub dependencies: HashMap<String, String>,
     #[serde(default)]
-    pub devDependencies: HashMap<String, String>,
+    pub dev_dependencies: HashMap<String, String>,
 }
 
 #[tauri::command]
@@ -23,7 +23,14 @@ pub async fn bundle_app(
 ) -> Result<String, String> {
     let app_dir = resolve_tilde(&app_dir)?;
 
-    emit(&app, format!("🚧 Preparing to bundle app '{}' in {}", alias, app_dir.display()));
+    emit(
+        &app,
+        format!(
+            "🚧 Preparing to bundle app '{}' in {}",
+            alias,
+            app_dir.display()
+        ),
+    );
 
     // Ensure tooling exists
     ensure_tool(&app, "node", &["--version"]).await?;
@@ -54,7 +61,10 @@ pub async fn bundle_app(
         find_package_json_dir(&app_dir)?
     };
 
-    emit(&app, format!("📦 package.json found at {}", project_dir.display()));
+    emit(
+        &app,
+        format!("📦 package.json found at {}", project_dir.display()),
+    );
 
     // Install deps (first build only). If node_modules exists, skip install to avoid
     // unnecessary churn that would retrigger the file watcher.
@@ -62,7 +72,10 @@ pub async fn bundle_app(
     if !node_modules.exists() {
         run(&app, "npm", &["install"], Some(&project_dir)).await?;
     } else {
-        emit(&app, "⏭️  Skipping npm install (node_modules present)".to_string());
+        emit(
+            &app,
+            "⏭️  Skipping npm install (node_modules present)".to_string(),
+        );
     }
 
     // Load package.json for framework detection
@@ -182,12 +195,7 @@ export default {{
             entry = entry_rel,
             bundle_file = bundle_file
         ),
-        other => {
-            return Err(format!(
-                "Unsupported framework for bundling: {}",
-                other
-            ))
-        }
+        other => return Err(format!("Unsupported framework for bundling: {}", other)),
     };
 
     let temp_config_path = project_dir.join("vite.config.mjs");
@@ -212,9 +220,7 @@ export default {{
     }
 
     // Read built bundle
-    let built = project_dir
-        .join(".tugboats-dist")
-        .join(&bundle_file);
+    let built = project_dir.join(".tugboats-dist").join(&bundle_file);
     let mut f = tokio::fs::File::open(&built)
         .await
         .map_err(|e| format!("Failed to read built bundle: {}", e))?;
@@ -226,10 +232,7 @@ export default {{
     // Save artifacts under ~/.tugboats/bundles
     let bundle_path = save_bundle_artifacts(&bundle_file, &js_code)?;
 
-    emit(
-        &app,
-        format!("🎉 Bundle saved: {}", bundle_path.display()),
-    );
+    emit(&app, format!("🎉 Bundle saved: {}", bundle_path.display()));
 
     Ok(bundle_path.to_string_lossy().to_string())
 }
@@ -258,7 +261,8 @@ async fn ensure_tool(app: &tauri::AppHandle, bin: &str, args: &[&str]) -> Result
     if !output.status.success() {
         let m = format!(
             "❌ Required tool '{}' returned non-zero status: {:?}",
-            bin, output.status.code()
+            bin,
+            output.status.code()
         );
         let _ = app.emit("tugboats://clone-progress", &m);
         return Err(m);
@@ -334,7 +338,7 @@ async fn read_package_json(project_dir: &Path) -> Result<PackageJson, String> {
 
 fn detect_framework(pkg: &PackageJson) -> Result<String, String> {
     let has = |name: &str| -> bool {
-        pkg.dependencies.contains_key(name) || pkg.devDependencies.contains_key(name)
+        pkg.dependencies.contains_key(name) || pkg.dev_dependencies.contains_key(name)
     };
     if has("svelte") || has("@sveltejs/kit") || has("@sveltejs/vite-plugin-svelte") {
         return Ok("svelte".to_string());
@@ -419,8 +423,7 @@ fn save_bundle_artifacts(file_name: &str, js_code: &str) -> Result<PathBuf, Stri
         .map_err(|e| format!("Failed to create bundles dir: {}", e))?;
 
     let bundle_path = bundles_dir.join(file_name);
-    std::fs::write(&bundle_path, js_code)
-        .map_err(|e| format!("Failed to write bundle: {}", e))?;
+    std::fs::write(&bundle_path, js_code).map_err(|e| format!("Failed to write bundle: {}", e))?;
 
     // Minimal importmap (externalize only @tugboats/core mapping left to host import maps);
     // write an empty map for now.
