@@ -9,6 +9,9 @@ import {
 } from "preact/compat";
 import { Editor, useEditorValue } from "./common/Monaco.tsx";
 import * as toml from "npm:smol-toml";
+import { btn } from "./design/buttons.ts";
+import { content } from "./design/content.ts";
+import { title } from "./design/text.ts";
 
 // -- Alias Map used for controlling rendering
 
@@ -258,13 +261,21 @@ export function PrefsEditor() {
 
   return (
     <div class="flex flex-col gap-2">
-      <div class="flex justify-between items-center">
-        <h3>Preferences</h3>
-        <button type="button" onClick={handleSavePrefs}>
-          Save
-        </button>
+      <div class={content({ y: "3" })}>
+        <div class="flex justify-between items-center">
+          <h2 class={title({ uppercase: true })}>Preferences</h2>
+          <button
+            class={btn({ type: "sm" })}
+            type="button"
+            onClick={handleSavePrefs}
+          >
+            Save
+          </button>
+        </div>
       </div>
-      <Editor value={editorValue} />
+      <div class={content({ frame: true })}>
+        <Editor value={editorValue} />
+      </div>
     </div>
   );
 }

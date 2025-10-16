@@ -13,7 +13,6 @@ import {
 } from "./AppPreferences.tsx";
 import { MountDevApp } from "./MountDevApp.tsx";
 import { MountProdApp } from "./MountProdApp.tsx";
-import { Frame } from "./design/Frame.tsx";
 
 const theInput = signal("");
 const theAlias = signal("");
@@ -97,8 +96,8 @@ function App() {
 function AppFrame(props: { children: ComponentChildren }) {
   return (
     <div class="p-2 min-h-full">
-      <div class="ring-5 ring-gray-600 rounded-md">
-        <div class="shadow-md rounded-sm bg-white">
+      <div class="ring-5 ring-gray-500/40 rounded-md">
+        <div class="shadow-md rounded-sm bg-stone-100">
           {props.children}
         </div>
       </div>

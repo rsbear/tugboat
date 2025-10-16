@@ -12,7 +12,9 @@
     "npm:react-dom@*": "19.2.0_react@19.2.0",
     "npm:react@*": "19.2.0",
     "npm:smol-toml@*": "1.4.2",
-    "npm:svelte@*": "5.39.12_acorn@8.15.0"
+    "npm:svelte@*": "5.39.12_acorn@8.15.0",
+    "npm:tailwind-merge@^3.3.1": "3.3.1",
+    "npm:tailwind-variants@^3.1.1": "3.1.1_tailwind-merge@3.3.1_tailwindcss@4.1.14"
   },
   "npm": {
     "@jridgewell/gen-mapping@0.3.13": {
@@ -226,6 +228,22 @@
         "zimmerframe"
       ]
     },
+    "tailwind-merge@3.3.1": {
+      "integrity": "sha512-gBXpgUm/3rp1lMZZrM/w7D8GKqshif0zAymAhbCyIt8KMe+0v9DQ7cdYLR4FHH/cKpdTXb+A/tKKU3eolfsI+g=="
+    },
+    "tailwind-variants@3.1.1_tailwind-merge@3.3.1_tailwindcss@4.1.14": {
+      "integrity": "sha512-ftLXe3krnqkMHsuBTEmaVUXYovXtPyTK7ckEfDRXS8PBZx0bAUas+A0jYxuKA5b8qg++wvQ3d2MQ7l/xeZxbZQ==",
+      "dependencies": [
+        "tailwind-merge",
+        "tailwindcss"
+      ],
+      "optionalPeers": [
+        "tailwind-merge"
+      ]
+    },
+    "tailwindcss@4.1.14": {
+      "integrity": "sha512-b7pCxjGO98LnxVkKjaZSDeNuljC4ueKUddjENJOADtubtdo8llTaJy7HwBMeLNSSo2N5QIAgklslK1+Ir8r6CA=="
+    },
     "typescript@5.9.3": {
       "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
       "bin": true
@@ -239,7 +257,9 @@
       "npm:@preact/signals@^2.3.2",
       "npm:@tauri-apps/cli@^2.8.4",
       "npm:@tauri-apps/plugin-global-shortcut@^2.3.0",
-      "npm:preact@^10.27.2"
+      "npm:preact@^10.27.2",
+      "npm:tailwind-merge@^3.3.1",
+      "npm:tailwind-variants@^3.1.1"
     ]
   }
 }

@@ -10,7 +10,9 @@
     "@preact/signals": "npm:@preact/signals@^2.3.2",
     "@tauri-apps/cli": "npm:@tauri-apps/cli@^2.8.4",
     "@tauri-apps/plugin-global-shortcut": "npm:@tauri-apps/plugin-global-shortcut@^2.3.0",
-    "preact": "npm:preact@^10.27.2"
+    "preact": "npm:preact@^10.27.2",
+    "tailwind-merge": "npm:tailwind-merge@^3.3.1",
+    "tailwind-variants": "npm:tailwind-variants@^3.1.1"
   },
   "compilerOptions": {
     "jsx": "react-jsx",
