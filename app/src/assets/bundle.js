@@ -43022,26 +43022,26 @@ async function handleRepositoryCloning(clones, gitProtocol) {
     console.log("Clone progress:", event.payload);
   });
   try {
-    console.log(`\u{1F4CB} Found ${clones.length} repositories to process`);
+    console.log(`Found ${clones.length} repositories to process`);
     for (let i5 = 0; i5 < clones.length; i5++) {
       const clone2 = clones[i5];
       if (!clone2.github_url) {
-        console.warn(`\u26A0\uFE0F Skipping entry ${i5 + 1}: missing github_url`, clone2);
+        console.warn(`Skipping entry ${i5 + 1}: missing github_url`, clone2);
         continue;
       }
       const dirPath = clone2.dir || "~/tugboat_apps";
       const repoName = clone2.alias || extractRepoNameFromUrl(clone2.github_url);
       console.log(`[${i5 + 1}/${clones.length}] Processing: ${repoName}`);
-      console.log(`\u{1F4C2} Target directory: ${dirPath}`);
+      console.log(`Target directory: ${dirPath}`);
       try {
         await window.__TAURI__.core.invoke("clone_repo", {
           githubUrl: clone2.github_url,
           dirPath,
           gitProtocol: gitProtocol || "https"
         });
-        console.log(`\u2705 Completed: ${repoName}`);
+        console.log(`Completed: ${repoName}`);
       } catch (error) {
-        console.error(`\u274C Failed to clone ${repoName}:`, error);
+        console.error(`Failed to clone ${repoName}:`, error);
       }
     }
   } finally {
@@ -43053,11 +43053,11 @@ async function handleAppsCloning(apps, gitProtocol) {
     console.log("Apps clone progress:", event.payload);
   });
   try {
-    console.log(`\u{1F4CB} Found ${apps.length} apps to process`);
+    console.log(`Found ${apps.length} apps to process`);
     for (let i5 = 0; i5 < apps.length; i5++) {
       const app = apps[i5];
       if (!app.github_url) {
-        console.warn(`\u26A0\uFE0F Skipping app ${i5 + 1}: missing github_url`, app);
+        console.warn(`Skipping app ${i5 + 1}: missing github_url`, app);
         continue;
       }
       let parsedInfo;
@@ -43066,29 +43066,29 @@ async function handleAppsCloning(apps, gitProtocol) {
           githubUrl: app.github_url
         });
       } catch (e4) {
-        console.log(`\u274C Failed to parse app URL:`, e4);
+        console.log(`Failed to parse app URL:`, e4);
         continue;
       }
       const repoName = parsedInfo.repo;
       const repoRootDir = `~/.tugboats/tmp/${repoName}`;
       console.log(`[${i5 + 1}/${apps.length}] Processing app: ${repoName}`);
-      console.log(`\u{1F4C2} Repo clone target: ${repoRootDir}`);
+      console.log(`Repo clone target: ${repoRootDir}`);
       try {
         await window.__TAURI__.core.invoke("clone_app", {
           githubUrl: app.github_url,
           gitProtocol: gitProtocol || "https"
         });
-        console.log(`\u2705 Completed app clone: ${repoName}`);
-        console.log(`\u{1F6E0}\uFE0F Bundling app at ${repoRootDir} ...`);
+        console.log(`Completed app clone: ${repoName}`);
+        console.log(` Bundling app at ${repoRootDir} ...`);
         const bundleAlias = app.alias || repoName;
         const bundlePath = await window.__TAURI__.core.invoke("bundle_app", {
           appDir: repoRootDir,
           alias: bundleAlias,
           githubUrl: app.github_url
         });
-        console.log(`\u{1F4E6} Bundle ready: ${bundlePath}`);
+        console.log(`Bundle ready: ${bundlePath}`);
       } catch (error) {
-        console.error(`\u274C Failed to process app ${repoName}:`, error);
+        console.error(`Failed to process app ${repoName}:`, error);
       }
     }
   } finally {

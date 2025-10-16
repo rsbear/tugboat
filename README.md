@@ -28,18 +28,9 @@ In the case above, 'websearch' is the tugboat application alias 'risotto recipes
 ### Installation
 Work in progress, coming soon.
 
-### Tugboat Preferences Docs (INCOMPLETE)
-**tugboat** (base config)
-- `git_protocol`: configures backend to use SSH or HTTPS for git clones
-- `apps`: On save, bundles each tugboat app from the associated `github_url`
-- `clones`: On save, clones repo from associated `github_url` to `dir`
-
-**NOTES**
-- `apps` should be thought of as an installation or production version
-- `clones` can be any repo. we lookup if a clone has a `tugboat.ts(x)` file and if it does, we
-auto start/stop a vite dev instance depending the host input value
 
 ---
+
 
 ## Tugboat apps overview
 
@@ -88,6 +79,7 @@ export function tugboatSvelte(domNode: HTMLElement) {
 
 ---
 
+
 ## Development (Tugboat Host aka this repo)
 ***Prerequisites***
 - [Deno](https://deno.com/)
@@ -104,7 +96,9 @@ just dev
 just check_cargo
 ```
 
+
 ---
+
 
 ## But.. Why..?
 Two main reasons:
