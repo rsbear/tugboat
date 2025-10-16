@@ -1,7 +1,7 @@
 # Tugboats
 _This project is currently in its' prototype phase_
 
-Is a single input and host/runtime/framework for React and Svelte applications. Think of it as an intersection between the more traditional command line and web technologies. It gives users the ability to alias tugboat applications (within the runtime) and forward along an input.
+Is a single input and host/runtime/framework for React and Svelte applications that can be accessed via a single hotkey (Super+K). Think of it as an intersection between the more traditional command line and web technologies. It gives users the ability to alias tugboat applications (within the runtime) and forward along an input.
 
 ### Risks to know before you continue reading
 - Tugboats downloads and builds JavaScript/NPM applications from any Git URL. **This is a security risk**. We should not be held responsible for any code you download and execute on your machine. Use at your own risk.
@@ -11,23 +11,25 @@ Take the following example input: websearch risotto recipes
 In the case above, 'websearch' is the tugboat application alias 'risotto recipes' is the query. The input is broken into 2 parts - first word is the application alias, second part is the query. A space character is used to separate the two parts.
 
 ### Features
+- [x] Open via Hotkey (Super+K)
 - [x] Built in Key Value store via SQLite
 - [x] Monaco editor
 - [x] Configure the host via TOML
 - [x] Bundle apps from GitHub URLs via Vite
 - [x] A 'dev environment' for clones, AKA bundles and reloads on file saves
 - [x] Tailwind via the Host, albiet just via their PlayCDN lol
+- [x] Support for React Apps
+- [x] Support for Svelte Apps
+- [ ] Support for Vue Apps
+- [ ] Support for Gleam/Lustre Apps
 - [x] Core SDK distributed via NPM
 - [ ] React SDK (wraps the core SDK)
 - [ ] Svelte SDK (wraps the core SDK)
-- [ ] Vue frontend support
-- [ ] Gleam/Lustre frontend support
 - [ ] Supports WebWorkers on a per-app basis
 - [ ] Built in docs
 
 ### Installation
-Work in progress, coming soon.
-
+_Work in progress, coming soon_
 
 ---
 
