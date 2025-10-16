@@ -1,7 +1,7 @@
 # Tugboats
 _This project is currently in its' prototype phase_
 
-Is a single input and host/runtime for React and Svelte applications. Think of it as an intersection between the more traditional command line and web technologies. It gives users the ability to alias tugboat applications (within the runtime) and forward along an input.
+Is a single input and host/runtime/framework for React and Svelte applications. Think of it as an intersection between the more traditional command line and web technologies. It gives users the ability to alias tugboat applications (within the runtime) and forward along an input.
 
 ### Risks to know before you continue reading
 - Tugboats downloads and builds JavaScript/NPM applications from any Git URL. **This is a security risk**. We should not be held responsible for any code you download and execute on your machine. Use at your own risk.
