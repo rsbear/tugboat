@@ -13,6 +13,7 @@ import {
 } from "./AppPreferences.tsx";
 import { MountDevApp } from "./MountDevApp.tsx";
 import { MountProdApp } from "./MountProdApp.tsx";
+import { Frame } from "./design/Frame.tsx";
 
 const theInput = signal("");
 const theAlias = signal("");
@@ -43,43 +44,45 @@ function App() {
   };
 
   return (
-    <div>
-      <div className="w-full flex items-center bg-green-300">
-        <form className="flex-1 flex" id="the-input-form">
-          <input
-            id="the-input"
-            className="flex-1"
-            placeholder="..."
-            autoCapitalize="off"
-            autoComplete="off"
-            autoCorrect="off"
-            value={input.get().raw}
-            onChange={onChange}
-          />
-          <button className="flex-0 justify-self-end" type="submit">
-            Greet
-          </button>
-        </form>
-        <div id="hints-slot">
-          <span>hints</span>
+    <div class="p-4">
+      <Frame>
+        <div className="w-full flex items-center bg-green-300">
+          <form className="flex-1 flex" id="the-input-form">
+            <input
+              id="the-input"
+              className="flex-1"
+              placeholder="..."
+              autoCapitalize="off"
+              autoComplete="off"
+              autoCorrect="off"
+              value={input.get().raw}
+              onChange={onChange}
+            />
+            <button className="flex-0 justify-self-end" type="submit">
+              Greet
+            </button>
+          </form>
+          <div id="hints-slot">
+            <span>hints</span>
+          </div>
         </div>
-      </div>
 
-      <Show when={aliasTag(theAlias.value) === "prefs"}>
-        <PrefsEditor />
-      </Show>
+        <Show when={aliasTag(theAlias.value) === "prefs"}>
+          <PrefsEditor />
+        </Show>
 
-      <Show when={aliasTag(theAlias.value) === "secrets"}>
-        <Secrets />
-      </Show>
+        <Show when={aliasTag(theAlias.value) === "secrets"}>
+          <Secrets />
+        </Show>
 
-      <Show when={aliasTag(theAlias.value) === "app"}>
-        <MountProdApp alias={theAlias.value} />
-      </Show>
+        <Show when={aliasTag(theAlias.value) === "app"}>
+          <MountProdApp alias={theAlias.value} />
+        </Show>
 
-      <Show when={aliasTag(theAlias.value) === "clone"}>
-        <MountDevApp alias={theAlias.value} />
-      </Show>
+        <Show when={aliasTag(theAlias.value) === "clone"}>
+          <MountDevApp alias={theAlias.value} />
+        </Show>
+      </Frame>
     </div>
   );
 }

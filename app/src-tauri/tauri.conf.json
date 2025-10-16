@@ -10,14 +10,19 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tugboats",
-        "width": 800,
-        "height": 600
+        "fullscreen": false,
+        "height": 250,
+        "width": 600,
+        "resizable": true,
+        "decorations": false,
+        "center": true,
+        "visible": false
       }
     ],
     "security": {
       "csp": "default-src 'self'; connect-src 'self' http://localhost:* ws://localhost:*; script-src 'self' 'unsafe-inline' http://localhost:*; style-src 'self' 'unsafe-inline'"
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

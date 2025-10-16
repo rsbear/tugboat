@@ -1,13 +1,20 @@
 use crate::git_url_parser::GitUrl;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Listener, Manager};
+use tauri_nspanel::ManagerExt;
 use tauri_plugin_fs::FsExt;
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use window::WebviewWindowExt;
 
 pub mod bundler;
+pub mod commands;
 pub mod devserver;
 pub mod git_url_parser;
 pub mod kv;
+pub mod window;
+
+pub const SPOTLIGHT_LABEL: &str = "main";
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -202,11 +209,14 @@ async fn run_git_clone(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        // NOTE: nspanel plugin causes panic during init - needs investigation
+        .plugin(tauri_nspanel::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            commands::show,
+            commands::hide,
             parse_github_url,
             clone_repo,
             clone_app,
@@ -223,9 +233,7 @@ pub fn run() {
             kv::kv_get,
             kv::kv_set,
             kv::kv_list,
-            kv::kv_delete,
-            kv::kv_search,
-            kv::kv_tables,
+            kv::kv_delete
         ])
         .setup(move |app| {
             // Initialize KV database in background
@@ -236,24 +244,78 @@ pub fn run() {
                 }
             });
 
-            #[cfg(desktop)]
-            app.handle()
-                .plugin(tauri_plugin_global_shortcut::Builder::new().build());
-
             // Initialize dev server manager
             let dev_manager = devserver::DevServerManager::new(app.handle().clone());
             app.manage(dev_manager);
 
             // Use ~/.tugboats as the custom data directory
-            let home = dirs::home_dir().expect("No home directory found");
+            let home = dirs::home_dir().ok_or("No home directory found")?;
             let tugboats_dir = home.join(".tugboats");
-            std::fs::create_dir_all(&tugboats_dir).expect("Failed to create ~/.tugboats directory");
+            std::fs::create_dir_all(&tugboats_dir)
+                .map_err(|e| format!("Failed to create ~/.tugboats directory: {}", e))?;
 
             // Allow Tauri FS scope to serve files from ~/.tugboats
             app.fs_scope().allow_directory(&tugboats_dir, true)?;
 
+            // Convert main window to nspanel
+            // NOTE: Commented out until nspanel plugin initialization issue is fixed
+            // if let Some(window) = app.app_handle().get_webview_window(SPOTLIGHT_LABEL) {
+            //     match window.to_spotlight_panel() {
+            //         Ok(panel) => {
+            //             let handle = app.app_handle();
+            //             handle.listen(
+            //                 format!("{}_panel_did_resign_key", SPOTLIGHT_LABEL),
+            //                 move |_| {
+            //                     // Hide the panel when it's no longer the key window
+            //                     panel.order_out(None);
+            //                 },
+            //             );
+            //         }
+            //         Err(e) => {
+            //             eprintln!("Failed to convert window to spotlight panel: {}", e);
+            //         }
+            //     }
+            // } else {
+            //     eprintln!("Warning: main window not found for spotlight panel conversion");
+            // }
+
+            // Set activation policy to Prohibited to prevent
+            // app icon in dock and focus stealing on first launch
+            //
+            // Alternative: use Accessory to allow app activation
+            // but hide from dock, it will steal focus on first launch
+            app.set_activation_policy(tauri::ActivationPolicy::Prohibited);
+
             Ok(())
         })
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcut(Shortcut::new(Some(Modifiers::SUPER), Code::KeyK))
+                .unwrap()
+                .with_handler(|app, shortcut, event| {
+                    if event.state == ShortcutState::Pressed
+                        && shortcut.matches(Modifiers::SUPER, Code::KeyK)
+                    {
+                        let window = app.get_webview_window(SPOTLIGHT_LABEL).unwrap();
+
+                        match app
+                            .get_webview_panel(SPOTLIGHT_LABEL)
+                            .or_else(|_| window.to_spotlight_panel())
+                        {
+                            Ok(panel) => {
+                                if panel.is_visible() {
+                                    panel.hide();
+                                } else {
+                                    window.center_at_cursor_monitor().unwrap();
+                                    panel.show_and_make_key();
+                                }
+                            }
+                            Err(e) => eprintln!("{:?}", e),
+                        }
+                    }
+                })
+                .build(),
+        )
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

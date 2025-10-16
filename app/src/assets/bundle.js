@@ -43474,6 +43474,14 @@ function MountProdApp(props) {
   });
 }
 
+// src/design/Frame.tsx
+function Frame(props) {
+  return /* @__PURE__ */ u2("div", {
+    className: "ring-2 ring-black/30 rounded-lg",
+    children: props.children
+  });
+}
+
 // src/App.tsx
 var theInput = d3("");
 var theAlias = d3("");
@@ -43496,60 +43504,63 @@ function App() {
     }
   };
   return /* @__PURE__ */ u2("div", {
-    children: [
-      /* @__PURE__ */ u2("div", {
-        className: "w-full flex items-center bg-green-300",
-        children: [
-          /* @__PURE__ */ u2("form", {
-            className: "flex-1 flex",
-            id: "the-input-form",
-            children: [
-              /* @__PURE__ */ u2("input", {
-                id: "the-input",
-                className: "flex-1",
-                placeholder: "...",
-                autoCapitalize: "off",
-                autoComplete: "off",
-                autoCorrect: "off",
-                value: input.get().raw,
-                onChange
-              }),
-              /* @__PURE__ */ u2("button", {
-                className: "flex-0 justify-self-end",
-                type: "submit",
-                children: "Greet"
+    class: "p-4",
+    children: /* @__PURE__ */ u2(Frame, {
+      children: [
+        /* @__PURE__ */ u2("div", {
+          className: "w-full flex items-center bg-green-300",
+          children: [
+            /* @__PURE__ */ u2("form", {
+              className: "flex-1 flex",
+              id: "the-input-form",
+              children: [
+                /* @__PURE__ */ u2("input", {
+                  id: "the-input",
+                  className: "flex-1",
+                  placeholder: "...",
+                  autoCapitalize: "off",
+                  autoComplete: "off",
+                  autoCorrect: "off",
+                  value: input.get().raw,
+                  onChange
+                }),
+                /* @__PURE__ */ u2("button", {
+                  className: "flex-0 justify-self-end",
+                  type: "submit",
+                  children: "Greet"
+                })
+              ]
+            }),
+            /* @__PURE__ */ u2("div", {
+              id: "hints-slot",
+              children: /* @__PURE__ */ u2("span", {
+                children: "hints"
               })
-            ]
-          }),
-          /* @__PURE__ */ u2("div", {
-            id: "hints-slot",
-            children: /* @__PURE__ */ u2("span", {
-              children: "hints"
             })
+          ]
+        }),
+        /* @__PURE__ */ u2(Show, {
+          when: aliasTag(theAlias.value) === "prefs",
+          children: /* @__PURE__ */ u2(PrefsEditor, {})
+        }),
+        /* @__PURE__ */ u2(Show, {
+          when: aliasTag(theAlias.value) === "secrets",
+          children: /* @__PURE__ */ u2(Secrets, {})
+        }),
+        /* @__PURE__ */ u2(Show, {
+          when: aliasTag(theAlias.value) === "app",
+          children: /* @__PURE__ */ u2(MountProdApp, {
+            alias: theAlias.value
           })
-        ]
-      }),
-      /* @__PURE__ */ u2(Show, {
-        when: aliasTag(theAlias.value) === "prefs",
-        children: /* @__PURE__ */ u2(PrefsEditor, {})
-      }),
-      /* @__PURE__ */ u2(Show, {
-        when: aliasTag(theAlias.value) === "secrets",
-        children: /* @__PURE__ */ u2(Secrets, {})
-      }),
-      /* @__PURE__ */ u2(Show, {
-        when: aliasTag(theAlias.value) === "app",
-        children: /* @__PURE__ */ u2(MountProdApp, {
-          alias: theAlias.value
+        }),
+        /* @__PURE__ */ u2(Show, {
+          when: aliasTag(theAlias.value) === "clone",
+          children: /* @__PURE__ */ u2(MountDevApp, {
+            alias: theAlias.value
+          })
         })
-      }),
-      /* @__PURE__ */ u2(Show, {
-        when: aliasTag(theAlias.value) === "clone",
-        children: /* @__PURE__ */ u2(MountDevApp, {
-          alias: theAlias.value
-        })
-      })
-    ]
+      ]
+    })
   });
 }
 function Show(props) {
