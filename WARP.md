@@ -13,6 +13,11 @@ just build_core
 just dev
 ```
 
+### Check commands
+```bash
+just check_cargo
+```
+
 ### Manual Commands
 ```bash
 # Build core package manually
