@@ -94,9 +94,9 @@ function App() {
   );
 }
 
-function AppFrame(props) {
+function AppFrame(props: { children: ComponentChildren }) {
   return (
-    <div class="p-5">
+    <div class="p-2 min-h-full">
       <div class="ring-5 ring-gray-600 rounded-md">
         <div class="shadow-md rounded-sm bg-white">
           {props.children}

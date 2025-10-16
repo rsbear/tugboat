@@ -43566,7 +43566,7 @@ function App() {
 }
 function AppFrame(props) {
   return /* @__PURE__ */ u2("div", {
-    class: "p-5",
+    class: "p-2 min-h-full",
     children: /* @__PURE__ */ u2("div", {
       class: "ring-5 ring-gray-600 rounded-md",
       children: /* @__PURE__ */ u2("div", {
