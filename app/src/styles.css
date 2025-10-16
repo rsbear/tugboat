@@ -1,4 +1,8 @@
 :root {
-    background: transparent;
+    background-color: transparent;
     border-radius: 40px;
+}
+
+html {
+    background-color: transparent;
 }

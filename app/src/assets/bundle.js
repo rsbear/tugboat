@@ -43474,14 +43474,6 @@ function MountProdApp(props) {
   });
 }
 
-// src/design/Frame.tsx
-function Frame(props) {
-  return /* @__PURE__ */ u2("div", {
-    className: "ring-2 ring-black/30 rounded-lg",
-    children: props.children
-  });
-}
-
 // src/App.tsx
 var theInput = d3("");
 var theAlias = d3("");
@@ -43503,20 +43495,48 @@ function App() {
       theAlias.value = "";
     }
   };
-  return /* @__PURE__ */ u2("div", {
-    class: "p-4",
-    children: /* @__PURE__ */ u2(Frame, {
+  return /* @__PURE__ */ u2(AppFrame, {
+    children: /* @__PURE__ */ u2("div", {
+      class: "flex flex-col",
       children: [
         /* @__PURE__ */ u2("div", {
-          className: "w-full flex items-center bg-green-300",
+          class: "flex-1"
+        }),
+        /* @__PURE__ */ u2("section", {
+          class: "flex-0",
+          children: [
+            /* @__PURE__ */ u2(Show, {
+              when: aliasTag(theAlias.value) === "prefs",
+              children: /* @__PURE__ */ u2(PrefsEditor, {})
+            }),
+            /* @__PURE__ */ u2(Show, {
+              when: aliasTag(theAlias.value) === "secrets",
+              children: /* @__PURE__ */ u2(Secrets, {})
+            }),
+            /* @__PURE__ */ u2(Show, {
+              when: aliasTag(theAlias.value) === "app",
+              children: /* @__PURE__ */ u2(MountProdApp, {
+                alias: theAlias.value
+              })
+            }),
+            /* @__PURE__ */ u2(Show, {
+              when: aliasTag(theAlias.value) === "clone",
+              children: /* @__PURE__ */ u2(MountDevApp, {
+                alias: theAlias.value
+              })
+            })
+          ]
+        }),
+        /* @__PURE__ */ u2("div", {
+          className: "w-full flex items-center flex-0",
           children: [
             /* @__PURE__ */ u2("form", {
-              className: "flex-1 flex",
+              className: "flex-1 flex border-r border-black/20 p-2",
               id: "the-input-form",
               children: [
                 /* @__PURE__ */ u2("input", {
                   id: "the-input",
-                  className: "flex-1",
+                  className: "flex-1 active:outline-none focus:outline-none",
                   placeholder: "...",
                   autoCapitalize: "off",
                   autoComplete: "off",
@@ -43533,33 +43553,26 @@ function App() {
             }),
             /* @__PURE__ */ u2("div", {
               id: "hints-slot",
+              class: "p-2",
               children: /* @__PURE__ */ u2("span", {
                 children: "hints"
               })
             })
           ]
-        }),
-        /* @__PURE__ */ u2(Show, {
-          when: aliasTag(theAlias.value) === "prefs",
-          children: /* @__PURE__ */ u2(PrefsEditor, {})
-        }),
-        /* @__PURE__ */ u2(Show, {
-          when: aliasTag(theAlias.value) === "secrets",
-          children: /* @__PURE__ */ u2(Secrets, {})
-        }),
-        /* @__PURE__ */ u2(Show, {
-          when: aliasTag(theAlias.value) === "app",
-          children: /* @__PURE__ */ u2(MountProdApp, {
-            alias: theAlias.value
-          })
-        }),
-        /* @__PURE__ */ u2(Show, {
-          when: aliasTag(theAlias.value) === "clone",
-          children: /* @__PURE__ */ u2(MountDevApp, {
-            alias: theAlias.value
-          })
         })
       ]
+    })
+  });
+}
+function AppFrame(props) {
+  return /* @__PURE__ */ u2("div", {
+    class: "p-5",
+    children: /* @__PURE__ */ u2("div", {
+      class: "ring-5 ring-gray-600 rounded-md",
+      children: /* @__PURE__ */ u2("div", {
+        class: "shadow-md rounded-sm bg-white",
+        children: props.children
+      })
     })
   });
 }

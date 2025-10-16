@@ -44,13 +44,35 @@ function App() {
   };
 
   return (
-    <div class="p-4">
-      <Frame>
-        <div className="w-full flex items-center bg-green-300">
-          <form className="flex-1 flex" id="the-input-form">
+    <AppFrame>
+      <div class="flex flex-col">
+        <div class="flex-1"></div>
+        <section class="flex-0">
+          <Show when={aliasTag(theAlias.value) === "prefs"}>
+            <PrefsEditor />
+          </Show>
+
+          <Show when={aliasTag(theAlias.value) === "secrets"}>
+            <Secrets />
+          </Show>
+
+          <Show when={aliasTag(theAlias.value) === "app"}>
+            <MountProdApp alias={theAlias.value} />
+          </Show>
+
+          <Show when={aliasTag(theAlias.value) === "clone"}>
+            <MountDevApp alias={theAlias.value} />
+          </Show>
+        </section>
+
+        <div className="w-full flex items-center flex-0">
+          <form
+            className="flex-1 flex border-r border-black/20 p-2"
+            id="the-input-form"
+          >
             <input
               id="the-input"
-              className="flex-1"
+              className="flex-1 active:outline-none focus:outline-none"
               placeholder="..."
               autoCapitalize="off"
               autoComplete="off"
@@ -62,27 +84,24 @@ function App() {
               Greet
             </button>
           </form>
-          <div id="hints-slot">
+
+          <div id="hints-slot" class="p-2">
             <span>hints</span>
           </div>
         </div>
+      </div>
+    </AppFrame>
+  );
+}
 
-        <Show when={aliasTag(theAlias.value) === "prefs"}>
-          <PrefsEditor />
-        </Show>
-
-        <Show when={aliasTag(theAlias.value) === "secrets"}>
-          <Secrets />
-        </Show>
-
-        <Show when={aliasTag(theAlias.value) === "app"}>
-          <MountProdApp alias={theAlias.value} />
-        </Show>
-
-        <Show when={aliasTag(theAlias.value) === "clone"}>
-          <MountDevApp alias={theAlias.value} />
-        </Show>
-      </Frame>
+function AppFrame(props) {
+  return (
+    <div class="p-5">
+      <div class="ring-5 ring-gray-600 rounded-md">
+        <div class="shadow-md rounded-sm bg-white">
+          {props.children}
+        </div>
+      </div>
     </div>
   );
 }

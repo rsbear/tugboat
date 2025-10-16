@@ -1,5 +1,5 @@
 use crate::git_url_parser::GitUrl;
-use tauri::{Emitter, Listener, Manager};
+use tauri::{Emitter, Manager};
 use tauri_nspanel::ManagerExt;
 use tauri_plugin_fs::FsExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
@@ -256,28 +256,6 @@ pub fn run() {
 
             // Allow Tauri FS scope to serve files from ~/.tugboats
             app.fs_scope().allow_directory(&tugboats_dir, true)?;
-
-            // Convert main window to nspanel
-            // NOTE: Commented out until nspanel plugin initialization issue is fixed
-            // if let Some(window) = app.app_handle().get_webview_window(SPOTLIGHT_LABEL) {
-            //     match window.to_spotlight_panel() {
-            //         Ok(panel) => {
-            //             let handle = app.app_handle();
-            //             handle.listen(
-            //                 format!("{}_panel_did_resign_key", SPOTLIGHT_LABEL),
-            //                 move |_| {
-            //                     // Hide the panel when it's no longer the key window
-            //                     panel.order_out(None);
-            //                 },
-            //             );
-            //         }
-            //         Err(e) => {
-            //             eprintln!("Failed to convert window to spotlight panel: {}", e);
-            //         }
-            //     }
-            // } else {
-            //     eprintln!("Warning: main window not found for spotlight panel conversion");
-            // }
 
             // Set activation policy to Prohibited to prevent
             // app icon in dock and focus stealing on first launch

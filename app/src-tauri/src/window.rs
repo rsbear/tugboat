@@ -61,6 +61,11 @@ impl<R: Runtime> WebviewWindowExt<R> for WebviewWindow<R> {
         // Ensures the panel cannot activate the App
         panel.set_style_mask(StyleMask::empty().nonactivating_panel().into());
 
+        panel.set_corner_radius(10.0);
+        panel.set_movable_by_window_background(true);
+        panel.set_has_shadow(true);
+        panel.set_transparent(true);
+
         // Setup event handler for panel events
         let handler = SpotlightPanelEventHandler::new();
 
