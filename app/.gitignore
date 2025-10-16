@@ -1,6 +1,8 @@
 # dependencies (bun install)
 node_modules
 
+app/src/assets/bundle.js
+
 # output
 out
 dist
