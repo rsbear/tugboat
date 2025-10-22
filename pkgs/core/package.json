@@ -1,6 +1,6 @@
 {
   "name": "@tugboats/core",
-  "version": "0.0.13",
+  "version": "0.0.15",
   "description": "Core SDK for Tugboats - a host/runtime for pluggable web applications",
   "license": "(MIT OR Apache-2.0)",
   "type": "module",

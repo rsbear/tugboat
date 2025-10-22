@@ -5,8 +5,8 @@ export type InputState = {
 
 export type ParsedInput = {
   raw: string;
-  alias: string;    // First word (e.g., "clone" from "clone my-repo")
-  query: string;    // Everything after alias (e.g., "my-repo" from "clone my-repo")
+  alias: string; // First word (e.g., "clone" from "clone my-repo")
+  query: string; // Everything after alias (e.g., "my-repo" from "clone my-repo")
 };
 
 export type SubmitHandler = (input: ParsedInput) => Promise<void> | void;
@@ -15,6 +15,7 @@ class InputStore {
   private state: InputState = { raw: "" };
   private listeners = new Set<(s: InputState) => void>();
   private submitHandler: SubmitHandler | null = null;
+  private isHiddenState: boolean = false;
 
   get() {
     return this.state;
@@ -50,7 +51,7 @@ class InputStore {
     try {
       await this.submitHandler(parsed);
     } catch (error) {
-      console.error('Submit handler error:', error);
+      console.error("Submit handler error:", error);
       throw error;
     }
   }
@@ -61,8 +62,22 @@ class InputStore {
     const parts = trimmed.split(/\s+/);
     const alias = parts[0] || "";
     const query = parts.slice(1).join(" ");
-    
+
     return { raw: trimmed, alias, query };
+  }
+
+  /**
+   * Hide the host input block
+   */
+  hide(bool: boolean): void {
+    this.isHiddenState = bool;
+  }
+
+  /**
+   * Check if the host input block is hidden
+   */
+  isHidden(): boolean {
+    return this.isHiddenState;
   }
 }
 
