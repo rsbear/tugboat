@@ -83,10 +83,10 @@ export function AppPreferencesCtxProvider(
 
   const loadPrefsFromKv = async () => {
     const res = await prefsKv.get(["user"]);
-    if (res._tag !== "Ok") return;
-    if (res._type !== "Item") return;
+    if (!res.isOk()) return;
+    if (!res.isItem()) return;
     // @ts-ignore - TODO should prob impl a type for prefs
-    setPrefs(res.result.value);
+    setPrefs(res.value());
   };
 
   useEffect(() => {
