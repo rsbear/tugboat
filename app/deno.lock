@@ -6,6 +6,7 @@
     "npm:@tauri-apps/cli@^2.8.4": "2.8.4",
     "npm:@tauri-apps/plugin-global-shortcut@^2.3.0": "2.3.0",
     "npm:@tugboats/core@*": "0.0.10",
+    "npm:@tugboats/core@0.0.15": "0.0.15",
     "npm:modern-monaco@*": "0.2.2_typescript@5.9.3",
     "npm:preact@*": "10.27.2",
     "npm:preact@^10.27.2": "10.27.2",
@@ -143,6 +144,9 @@
     },
     "@tugboats/core@0.0.10": {
       "integrity": "sha512-uru1mrOpnGUSHN/49nYe1Td6kcbTzrTvZfbbRre6T9DVBku6B2qkzuQmED1u2xe8gmVu2/2kokWngjPGu9I4cQ=="
+    },
+    "@tugboats/core@0.0.15": {
+      "integrity": "sha512-cTItUkjvbv5sUVsspXETO0cYxzjV6H9lW53P4VuCEZxJb7UFjQVoKCZz0YGFYhKDjPfe9YK7aI82uQwJjTfTkQ=="
     },
     "@types/estree@1.0.8": {
       "integrity": "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="

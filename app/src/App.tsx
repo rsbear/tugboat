@@ -2,7 +2,7 @@ import { render } from "npm:preact";
 import { Suspense } from "npm:preact/compat";
 import type { ComponentChildren } from "preact";
 
-import { input } from "npm:@tugboats/core";
+import { input } from "npm:@tugboats/core@0.0.15";
 
 import { signal } from "@preact/signals";
 import { MonacoCtxProvider } from "./common/Monaco.tsx";
@@ -42,6 +42,16 @@ function App() {
     }
   };
 
+  const onSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      await input.submit();
+    } catch (error) {
+      console.error("Submit handler error:", error);
+    }
+  };
+
   return (
     <AppFrame>
       <div class="flex flex-col">
@@ -64,10 +74,11 @@ function App() {
           </Show>
         </section>
 
-        <div className="w-full flex items-center flex-0">
+        <div className="w-full flex items-center flex-0 py-5">
           <form
-            className="flex-1 flex border-r border-black/20 p-2"
+            className="flex-1 flex border-r border-black/20 px-2"
             id="the-input-form"
+            onSubmit={onSubmit}
           >
             <input
               id="the-input"
@@ -80,11 +91,11 @@ function App() {
               onChange={onChange}
             />
             <button className="flex-0 justify-self-end" type="submit">
-              Greet
+              Submit
             </button>
           </form>
 
-          <div id="hints-slot" class="p-2">
+          <div id="hints-slot" class="px-2">
             <span>hints</span>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { kvTable } from "npm:@tugboats/core";
+import { kv } from "npm:@tugboats/core@0.0.15";
 import type { ComponentChildren } from "preact";
 import {
   createContext,
@@ -26,7 +26,7 @@ const defaultAliasMap = {
 
 // -- User preferences state, data, ui, stuff
 
-const prefsKv = kvTable("preferences");
+const prefsKv = kv("preferences");
 
 const defaultPrefs = {
   tugboat: {

@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from "npm:preact/compat";
+import type { Ref } from "preact";
+import { btn } from "./design/buttons.ts";
+import { content } from "./design/content.ts";
+import { title } from "./design/text.ts";
 
 const { invoke } = (window as any).__TAURI__.core;
 const { listen } = (window as any).__TAURI__.event;
@@ -15,14 +19,15 @@ export function MountDevApp(props: { alias: string }) {
     "starting",
   );
   const [logs, setLogs] = useState<DevLog[]>([]);
-  const [showLogs, setShowLogs] = useState(true);
+  const [showLogsModal, setShowLogsModal] = useState(false);
   const slotRef = useRef<HTMLDivElement>(null);
+  const logsEndRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const moduleRef = useRef<any>(null);
 
   const addLog = (type: DevLog["type"], content: string) => {
     setLogs(
-      (prev) => [...prev.slice(-199), { type, content, timestamp: new Date() }]
+      (prev) => [...prev.slice(-199), { type, content, timestamp: new Date() }],
     );
   };
 
@@ -172,13 +177,28 @@ export function MountDevApp(props: { alias: string }) {
     };
   }, [currentAlias]);
 
+  // Keyboard shortcut for Cmd+L to toggle logs modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+        e.preventDefault();
+        setShowLogsModal((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Auto-scroll logs to bottom
+  useEffect(() => {
+    if (showLogsModal && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, showLogsModal]);
+
   if (!currentAlias) return null;
 
-  const statusEmoji = status === "starting"
-    ? "🚀"
-    : status === "active"
-    ? "👁️"
-    : "❌";
   const statusText = status === "starting"
     ? "Starting..."
     : status === "active"
@@ -186,54 +206,149 @@ export function MountDevApp(props: { alias: string }) {
     : "Error";
 
   return (
-    <div className="dev-mode-container">
-      <div className={`dev-mode-indicator ${status}`}>
-        {statusEmoji} Dev: {currentAlias} ({statusText})
-      </div>
-
-      <div className="dev-mode-logs">
-        <div className="dev-mode-logs-header">
-          <span className="dev-mode-logs-title">Dev Mode Logs</span>
-          <button onClick={() => setShowLogs(!showLogs)}>
-            {showLogs ? "Hide" : "Show"}
-          </button>
-          <button onClick={() => setLogs([])}>Clear</button>
-        </div>
-        {showLogs && (
-          <div className="dev-mode-logs-content">
-            {logs.map((log, i) => (
-              <div key={i} className={`dev-log-entry dev-log-${log.type}`}>
-                <span className="dev-log-time">
-                  {log.timestamp.toLocaleTimeString()}
-                </span>
-                <span className="dev-log-content">{log.content}</span>
-              </div>
-            ))}
+    <div class="flex flex-col gap-2 relative">
+      {/* Header Section */}
+      <div class={content({ y: "3" })}>
+        <div class="flex justify-between items-center">
+          <h2 class={title({ uppercase: true })}>
+            Dev: {currentAlias} ({statusText})
+          </h2>
+          <div class="flex items-center gap-2">
+            <StatusIndicator status={status} />
+            <KeyboardHint
+              keys={["⌘", "L"]}
+              label="TOGGLE LOGS"
+              showLogsModal={showLogsModal}
+              setShowLogsModal={setShowLogsModal}
+            />
           </div>
-        )}
+        </div>
       </div>
 
-      <div ref={slotRef} className="tugboat-dev-slot" />
+      {/* App Section - Always Mounted */}
+      <div class={content({ frame: true })}>
+        <div ref={slotRef} class="tugboat-dev-slot" />
+      </div>
 
-      <style>
-        {`
-        .dev-mode-indicator { background: #1e293b; color: #94a3b8; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; margin: 8px 0; border-left: 4px solid #475569; }
-        .dev-mode-indicator.starting { background: #0f172a; color: #60a5fa; border-left-color: #3b82f6; animation: pulse 2s infinite; }
-        .dev-mode-indicator.active { background: #064e3b; color: #6ee7b7; border-left-color: #10b981; }
-        .dev-mode-indicator.error { background: #7f1d1d; color: #fca5a5; border-left-color: #dc2626; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .dev-mode-logs { background: #0f172a; border: 1px solid #334155; border-radius: 8px; margin: 16px 0; max-height: 400px; display: flex; flex-direction: column; }
-        .dev-mode-logs-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
-        .dev-mode-logs-title { color: #e2e8f0; font-weight: 500; flex: 1; }
-        .dev-mode-logs-header button { background: #475569; color: #e2e8f0; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
-        .dev-mode-logs-header button:hover { background: #64748b; }
-        .dev-mode-logs-content { flex: 1; padding: 8px; overflow-y: auto; max-height: 300px; font-family: monospace; font-size: 12px; line-height: 1.4; }
-        .dev-log-entry { display: flex; gap: 8px; margin-bottom: 4px; }
-        .dev-log-time { color: #64748b; font-size: 11px; min-width: 60px; }
-        .dev-log-content { color: #e2e8f0; flex: 1; }
-        .dev-log-error .dev-log-content { color: #fca5a5; }
-      `}
-      </style>
+      {/* Logs Modal */}
+      {showLogsModal && (
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div class="bg-slate-900 rounded-lg shadow-2xl w-full max-h-96 max-w-2xl flex flex-col">
+            <LogsView
+              logs={logs}
+              logsEndRef={logsEndRef}
+              onClear={() => setLogs([])}
+              onClose={() => setShowLogsModal(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function StatusIndicator({
+  status,
+}: {
+  status: "starting" | "active" | "error";
+}) {
+  const colorClass = status === "starting"
+    ? "text-blue-400"
+    : status === "active"
+    ? "text-green-400"
+    : "text-red-400";
+
+  return <span class={colorClass}>&middot;</span>;
+}
+
+function KeyboardHint({
+  keys,
+  label,
+  showLogsModal,
+  setShowLogsModal,
+}: {
+  keys: string[];
+  label: string;
+  showLogsModal: boolean;
+  setShowLogsModal: (show: boolean) => void;
+}) {
+  return (
+    <div class="flex items-center gap-1 text-xs opacity-70 font-mono">
+      {keys.map((k) => <KeyIcon char={k} />)}
+      <button
+        onClick={() => setShowLogsModal(!showLogsModal)}
+      >
+        {label}
+      </button>
+    </div>
+  );
+}
+
+function KeyIcon({ char }: { char: string }) {
+  return (
+    <div class="h-4 w-4 grid place-items-center rounded-xs ring-[1px] ring-gray-500">
+      <span>
+        {char}
+      </span>
+    </div>
+  );
+}
+
+function LogsView({
+  logs,
+  logsEndRef,
+  onClear,
+  onClose,
+}: {
+  logs: DevLog[];
+  logsEndRef: Ref<HTMLDivElement>;
+  onClear: () => void;
+  onClose?: () => void;
+}) {
+  return (
+    <div class="flex flex-col h-full">
+      <div class="flex justify-between items-center px-4 py-3 border-b border-slate-700 sticky top-0 bg-slate-900">
+        <span class="text-gray-300 font-mono text-sm">Dev Mode Logs</span>
+        <div class="flex items-center gap-2">
+          <button class={btn({ type: "sm" })} onClick={onClear}>
+            Clear
+          </button>
+          {onClose && (
+            <button class={btn({ type: "sm" })} onClick={onClose}>
+              Close
+            </button>
+          )}
+        </div>
+      </div>
+      <div class="px-3 py-2 overflow-y-auto flex-1 font-mono text-xs">
+        {logs.length === 0
+          ? (
+            <div class="text-gray-500">
+              No logs yet. Waiting for dev events...
+            </div>
+          )
+          : (
+            <>
+              {logs.map((log, i) => (
+                <div key={i} class={`py-1 flex gap-2 ${getLogColor(log.type)}`}>
+                  <span class="text-gray-500 text-[10px] min-w-[60px]">
+                    {log.timestamp.toLocaleTimeString()}
+                  </span>
+                  <span class="whitespace-pre-wrap">{log.content}</span>
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </>
+          )}
+      </div>
+    </div>
+  );
+}
+
+function getLogColor(type: DevLog["type"]): string {
+  return type === "error"
+    ? "text-red-400"
+    : type === "success"
+    ? "text-green-400"
+    : "text-gray-300";
 }
