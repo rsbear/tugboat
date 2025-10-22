@@ -1,10 +1,10 @@
 use crate::git_url_parser::GitUrl;
+use crate::jsrun::detect_runtime;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::Emitter;
 use tokio::io::AsyncReadExt;
-use tokio::process::Command;
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct PackageJson {
@@ -31,11 +31,6 @@ pub async fn bundle_app(
             app_dir.display()
         ),
     );
-
-    // Ensure tooling exists
-    ensure_tool(&app, "node", &["--version"]).await?;
-    ensure_tool(&app, "npm", &["--version"]).await?;
-    ensure_tool(&app, "npx", &["--version"]).await?;
 
     // Determine project directory (where package.json lives)
     // Prefer a subdirectory derived from github_url if provided
@@ -66,15 +61,19 @@ pub async fn bundle_app(
         format!("📦 package.json found at {}", project_dir.display()),
     );
 
+    // Detect runtime and ensure it's available
+    let runtime = detect_runtime(&project_dir);
+    runtime.ensure_tools_available().await?;
+
     // Install deps (first build only). If node_modules exists, skip install to avoid
     // unnecessary churn that would retrigger the file watcher.
     let node_modules = project_dir.join("node_modules");
     if !node_modules.exists() {
-        run(&app, "npm", &["install"], Some(&project_dir)).await?;
+        runtime.install(&project_dir).await?;
     } else {
         emit(
             &app,
-            "⏭️  Skipping npm install (node_modules present)".to_string(),
+            format!("⏭️  Skipping install (node_modules present)"),
         );
     }
 
@@ -87,25 +86,17 @@ pub async fn bundle_app(
     );
 
     // Ensure vite and plugin dev deps
-    run(&app, "npm", &["install", "-D", "vite"], Some(&project_dir)).await?;
+    runtime.install_dev(&["vite"], &project_dir).await?;
     match framework.as_str() {
         "svelte" => {
-            run(
-                &app,
-                "npm",
-                &["install", "-D", "@sveltejs/vite-plugin-svelte"],
-                Some(&project_dir),
-            )
-            .await?;
+            runtime
+                .install_dev(&["@sveltejs/vite-plugin-svelte"], &project_dir)
+                .await?;
         }
         "react" => {
-            run(
-                &app,
-                "npm",
-                &["install", "-D", "@vitejs/plugin-react"],
-                Some(&project_dir),
-            )
-            .await?;
+            runtime
+                .install_dev(&["@vitejs/plugin-react"], &project_dir)
+                .await?;
         }
         _ => {}
     }
@@ -205,13 +196,9 @@ export default {{
     emit(&app, "⚙️ Wrote temporary vite.config.mjs".to_string());
 
     // Run vite build
-    run(
-        &app,
-        "npx",
-        &["--yes", "vite", "build", "--config", "vite.config.mjs"],
-        Some(&project_dir),
-    )
-    .await?;
+    runtime
+        .build(&["vite", "build", "--config", "vite.config.mjs"], &project_dir)
+        .await?;
 
     // Clean up vite config and optional svelte config
     let _ = tokio::fs::remove_file(&temp_config_path).await;
@@ -252,47 +239,6 @@ fn resolve_tilde(p: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(p))
 }
 
-async fn ensure_tool(app: &tauri::AppHandle, bin: &str, args: &[&str]) -> Result<(), String> {
-    let output = Command::new(bin).args(args).output().await.map_err(|e| {
-        let m = format!("❌ Required tool '{}' not available: {}", bin, e);
-        let _ = app.emit("tugboats://clone-progress", &m);
-        m
-    })?;
-    if !output.status.success() {
-        let m = format!(
-            "❌ Required tool '{}' returned non-zero status: {:?}",
-            bin,
-            output.status.code()
-        );
-        let _ = app.emit("tugboats://clone-progress", &m);
-        return Err(m);
-    }
-    Ok(())
-}
-
-async fn run(
-    app: &tauri::AppHandle,
-    bin: &str,
-    args: &[&str],
-    cwd: Option<&Path>,
-) -> Result<(), String> {
-    let pretty = format!("{} {}", bin, args.join(" "));
-    emit(app, format!("$ {}", pretty));
-
-    let mut cmd = Command::new(bin);
-    cmd.args(args);
-    if let Some(dir) = cwd {
-        cmd.current_dir(dir);
-    }
-    let status = cmd
-        .status()
-        .await
-        .map_err(|e| format!("Failed to run '{}': {}", pretty, e))?;
-    if !status.success() {
-        return Err(format!("Command failed ({}): {:?}", pretty, status.code()));
-    }
-    Ok(())
-}
 
 fn find_package_json_dir(project_dir: &Path) -> Result<PathBuf, String> {
     let root_pkg = project_dir.join("package.json");

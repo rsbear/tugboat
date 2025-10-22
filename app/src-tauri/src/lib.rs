@@ -11,6 +11,7 @@ pub mod bundler;
 pub mod commands;
 pub mod devserver;
 pub mod git_url_parser;
+pub mod jsrun;
 pub mod kv;
 pub mod window;
 

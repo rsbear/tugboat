@@ -3,10 +3,10 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
-use tokio::process::Command;
 use tokio::sync::mpsc;
 
 use crate::git_url_parser::GitUrl;
+use crate::jsrun::{detect_runtime, JSRuntime};
 use crate::kv;
 
 pub struct DevServerManager {
@@ -74,31 +74,14 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
         find_package_json_dir(&app_dir)?
     };
 
-    // Detect package manager and ensure tools are available
-    let package_manager = detect_package_manager(&project_dir);
-    ensure_tool("node", &["--version"]).await?;
-    match package_manager {
-        "npm" => {
-            ensure_tool("npm", &["--version"]).await?;
-            ensure_tool("npx", &["--version"]).await?;
-        }
-        "deno" => ensure_tool("deno", &["--version"]).await?,
-        "bun" => ensure_tool("bun", &["--version"]).await?,
-        _ => {
-            ensure_tool("npm", &["--version"]).await?;
-            ensure_tool("npx", &["--version"]).await?;
-        }
-    }
+    // Detect runtime and ensure tools are available
+    let runtime = detect_runtime(&project_dir);
+    runtime.ensure_tools_available().await?;
 
     // Ensure deps installed once
     let node_modules = project_dir.join("node_modules");
     if !node_modules.exists() {
-        match package_manager {
-            "npm" => run("npm", &["install"], Some(&project_dir)).await?,
-            "deno" => {} // Deno doesn't need install step
-            "bun" => run("bun", &["install"], Some(&project_dir)).await?,
-            _ => run("npm", &["install"], Some(&project_dir)).await?,
-        }
+        runtime.install(&project_dir).await?;
     }
 
     // Read package.json and detect framework
@@ -107,76 +90,19 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
         detect_framework(&pkg).map_err(|e| format!("Framework detection failed: {}", e))?;
 
     // Ensure vite and framework plugin present
-    match package_manager {
-        "npm" => {
-            run("npm", &["install", "-D", "vite"], Some(&project_dir)).await?;
-            match framework.as_str() {
-                "svelte" => {
-                    run(
-                        "npm",
-                        &["install", "-D", "@sveltejs/vite-plugin-svelte"],
-                        Some(&project_dir),
-                    )
-                    .await?;
-                }
-                "react" => {
-                    run(
-                        "npm",
-                        &["install", "-D", "@vitejs/plugin-react"],
-                        Some(&project_dir),
-                    )
-                    .await?;
-                }
-                _ => {}
-            }
+    runtime.install_dev(&["vite"], &project_dir).await?;
+    match framework.as_str() {
+        "svelte" => {
+            runtime
+                .install_dev(&["@sveltejs/vite-plugin-svelte"], &project_dir)
+                .await?;
         }
-        "bun" => {
-            run("bun", &["add", "-d", "vite"], Some(&project_dir)).await?;
-            match framework.as_str() {
-                "svelte" => {
-                    run(
-                        "bun",
-                        &["add", "-d", "@sveltejs/vite-plugin-svelte"],
-                        Some(&project_dir),
-                    )
-                    .await?;
-                }
-                "react" => {
-                    run(
-                        "bun",
-                        &["add", "-d", "@vitejs/plugin-react"],
-                        Some(&project_dir),
-                    )
-                    .await?;
-                }
-                _ => {}
-            }
+        "react" => {
+            runtime
+                .install_dev(&["@vitejs/plugin-react"], &project_dir)
+                .await?;
         }
-        "deno" => {
-            // Deno uses import maps or deps.ts, no install needed
-        }
-        _ => {
-            run("npm", &["install", "-D", "vite"], Some(&project_dir)).await?;
-            match framework.as_str() {
-                "svelte" => {
-                    run(
-                        "npm",
-                        &["install", "-D", "@sveltejs/vite-plugin-svelte"],
-                        Some(&project_dir),
-                    )
-                    .await?;
-                }
-                "react" => {
-                    run(
-                        "npm",
-                        &["install", "-D", "@vitejs/plugin-react"],
-                        Some(&project_dir),
-                    )
-                    .await?;
-                }
-                _ => {}
-            }
-        }
+        _ => {}
     }
 
     // Resolve tugboats entry
@@ -267,14 +193,7 @@ export default config;
         .map_err(|e| format!("Failed to write vite.config.mjs: {}", e))?;
 
     // Perform initial build
-    build_dev_bundle(
-        &manager,
-        &alias,
-        &project_dir,
-        &package_manager,
-        &bundle_file,
-    )
-    .await?;
+    build_dev_bundle(&manager, &alias, &project_dir, &runtime, &bundle_file).await?;
 
     // Set up file watcher for JIT builds with channel-based communication
     let (rebuild_tx, mut rebuild_rx) = mpsc::unbounded_channel();
@@ -283,7 +202,7 @@ export default config;
     let app_handle_clone = manager.app_handle.clone();
     let alias_clone = alias.clone();
     let project_dir_clone = project_dir.clone();
-    let package_manager_clone = package_manager.to_string();
+    let runtime_clone = runtime;
     let bundle_file_clone = bundle_file.clone();
 
     // Spawn background task to handle rebuild requests
@@ -303,7 +222,7 @@ export default config;
                 &mgr,
                 &alias_clone,
                 &project_dir_clone,
-                &package_manager_clone,
+                &runtime_clone,
                 &bundle_file_clone,
             )
             .await
@@ -388,49 +307,15 @@ async fn build_dev_bundle(
     manager: &DevServerManager,
     alias: &str,
     project_dir: &Path,
-    package_manager: &str,
+    runtime: &JSRuntime,
     bundle_file: &str,
 ) -> Result<(), String> {
     manager.app_handle.emit("dev:build_started", alias).ok();
 
-    // Choose build command based on detected package manager
-    let (cmd, args) = match package_manager {
-        "npm" => (
-            "npx",
-            vec!["--yes", "vite", "build", "--config", "vite.config.mjs"],
-        ),
-        "deno" => (
-            "deno",
-            vec![
-                "run",
-                "--allow-all",
-                "npm:vite",
-                "build",
-                "--config",
-                "vite.config.mjs",
-            ],
-        ),
-        "bun" => ("bunx", vec!["vite", "build", "--config", "vite.config.mjs"]),
-        _ => (
-            "npx",
-            vec!["--yes", "vite", "build", "--config", "vite.config.mjs"],
-        ),
-    };
-
-    // Run build command and capture output
-    let output = Command::new(cmd)
-        .args(&args)
-        .current_dir(project_dir)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run build command: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let error_msg = format!("Build failed:\n{}\n{}", stderr, stdout);
-        return Err(error_msg);
-    }
+    // Run build command using runtime abstraction
+    runtime
+        .build(&["vite", "build", "--config", "vite.config.mjs"], project_dir)
+        .await?;
 
     // Read built bundle
     let built_path = project_dir.join(".tugboats-dist").join(bundle_file);
@@ -570,43 +455,6 @@ struct PackageJson {
     dev_dependencies: std::collections::HashMap<String, String>,
 }
 
-async fn ensure_tool(bin: &str, args: &[&str]) -> Result<(), String> {
-    let output = Command::new(bin)
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| format!("Required tool '{}' not available: {}", bin, e))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "Tool '{}' returned non-zero status: {:?}",
-            bin,
-            output.status.code()
-        ));
-    }
-    Ok(())
-}
-
-async fn run(bin: &str, args: &[&str], cwd: Option<&Path>) -> Result<(), String> {
-    let mut cmd = Command::new(bin);
-    cmd.args(args);
-    if let Some(dir) = cwd {
-        cmd.current_dir(dir);
-    }
-    let status = cmd
-        .status()
-        .await
-        .map_err(|e| format!("Failed to run '{} {}': {}", bin, args.join(" "), e))?;
-    if !status.success() {
-        return Err(format!(
-            "Command failed ({} {}): {:?}",
-            bin,
-            args.join(" "),
-            status.code()
-        ));
-    }
-    Ok(())
-}
 
 async fn read_package_json(project_dir: &Path) -> Result<PackageJson, String> {
     let pkg_path = project_dir.join("package.json");
@@ -650,14 +498,6 @@ fn resolve_tugboats_entry(repo_dir: &Path) -> Option<String> {
     None
 }
 
-fn detect_package_manager(project_dir: &Path) -> &'static str {
-    match () {
-        _ if project_dir.join("package-lock.json").exists() => "npm",
-        _ if project_dir.join("deno.lock").exists() => "deno",
-        _ if project_dir.join("bun.lock").exists() => "bun",
-        _ => "npm", // default fallback
-    }
-}
 
 #[tauri::command]
 pub async fn get_home_dir() -> Result<String, String> {
