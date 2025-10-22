@@ -1,6 +1,6 @@
 {
   "name": "@tugboats/core",
-  "version": "0.0.10",
+  "version": "0.0.13",
   "description": "Core SDK for Tugboats - a host/runtime for pluggable web applications",
   "license": "(MIT OR Apache-2.0)",
   "type": "module",
@@ -34,10 +34,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/goodtime/tugboats",
+    "url": "https://github.com/rsbear/tugboats",
     "directory": "pkgs/core"
   },
-  "homepage": "https://github.com/goodtime/tugboats",
+  "homepage": "https://github.com/rsbear/tugboats",
   "engines": {
     "node": ">=18.0.0"
   }

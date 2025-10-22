@@ -2,8 +2,8 @@
 
 // Core functionality
 export { input } from "./input.ts";
-export { kvTable } from "./kv.ts";
+export { kv } from "./kv.ts";
 
 // Types for external consumption
-export type { InputState } from "./input.ts";
-export type { KvItem, KvMsg, KvTable } from "./kv.ts";
+export type { InputState, ParsedInput, SubmitHandler } from "./input.ts";
+export type { KV, KvItem, KvMsg } from "./kv.ts";
