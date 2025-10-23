@@ -13,6 +13,7 @@ import {
 } from "./AppPreferences.tsx";
 import { MountDevApp } from "./MountDevApp.tsx";
 import { MountProdApp } from "./MountProdApp.tsx";
+import { AppSecrets } from "./AppSecrets.tsx";
 
 const theInput = signal("");
 const theAlias = signal("");
@@ -62,7 +63,7 @@ function App() {
           </Show>
 
           <Show when={aliasTag(theAlias.value) === "secrets"}>
-            <Secrets />
+            <AppSecrets />
           </Show>
 
           <Show when={aliasTag(theAlias.value) === "app"}>
@@ -121,13 +122,6 @@ function Show(props: { when: boolean; children: ComponentChildren }) {
   return <>{props.children}</>;
 }
 
-function Secrets() {
-  return (
-    <div>
-      <h2>secrets</h2>
-    </div>
-  );
-}
 
 render(
   <Suspense fallback={<div>Loading...</div>}>
