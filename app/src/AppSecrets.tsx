@@ -1,37 +1,17 @@
 import { signal } from "@preact/signals";
 import { useEffect, useState } from "preact/hooks";
-import {
-  initVault,
-  set,
-  get,
-  vaultExists,
-  lockVault,
-  isUnlocked,
-} from "./common/secrets_internal.ts";
-
+import { useSecretsCtx } from "./common/AppSecretsContext.tsx";
 import { kv } from "npm:@tugboats/core@0.0.15";
-
-/**
- * Read-only secret access for tugboat apps.
- * Host controls secret creation and lifecycle.
- */
-export async function getSecret(key: string): Promise<string> {
-  const value = await get(key);
-  if (!value) {
-    throw new Error(`Secret "${key}" not found`);
-  }
-  return value;
-}
 
 interface SecretEntry {
   id: string;
   key: string;
   value: string;
+  isSaved?: boolean; // Track if this secret has been saved to the vault
 }
 
 const status = signal("");
 const isInitialized = signal(false);
-const isSaving = signal(false);
 
 // KV table for storing secret keys (not values)
 const secretsKV = kv("secrets-metadata");
@@ -40,6 +20,7 @@ type VaultState = "setup" | "locked" | "unlocked";
 
 // PassphraseSetup Component
 function PassphraseSetup({ onSetupComplete }: { onSetupComplete: () => void }) {
+  const secretsCtx = useSecretsCtx();
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const [error, setError] = useState("");
@@ -64,7 +45,7 @@ function PassphraseSetup({ onSetupComplete }: { onSetupComplete: () => void }) {
       status.value = "Setting up vault...";
 
       // Initialize the vault with the user's passphrase
-      await initVault(passphrase);
+      await secretsCtx.initVault(passphrase);
 
       isInitialized.value = true;
       status.value = "✅ Vault setup complete";
@@ -145,6 +126,7 @@ function PassphraseSetup({ onSetupComplete }: { onSetupComplete: () => void }) {
 
 // UnlockVault Component
 function UnlockVault({ onUnlockSuccess }: { onUnlockSuccess: () => void }) {
+  const secretsCtx = useSecretsCtx();
   const [passphrase, setPassphrase] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -163,7 +145,7 @@ function UnlockVault({ onUnlockSuccess }: { onUnlockSuccess: () => void }) {
       status.value = "Unlocking vault...";
 
       // Try to initialize/unlock the vault with the passphrase
-      await initVault(passphrase);
+      await secretsCtx.initVault(passphrase);
 
       isInitialized.value = true;
       status.value = "✅ Vault unlocked";
@@ -227,13 +209,14 @@ function UnlockVault({ onUnlockSuccess }: { onUnlockSuccess: () => void }) {
 }
 
 export function AppSecrets() {
+  const secretsCtx = useSecretsCtx();
   const [vaultState, setVaultState] = useState<VaultState>("setup");
 
   // Check vault setup state on mount by checking if canary exists in KV
   useEffect(() => {
     const checkVaultState = async () => {
       try {
-        const exists = await vaultExists();
+        const exists = await secretsCtx.vaultExists();
         if (exists) {
           setVaultState("locked");
         }
@@ -253,7 +236,7 @@ export function AppSecrets() {
   };
 
   const handleLockVault = async () => {
-    await lockVault();
+    await secretsCtx.lockVault();
     isInitialized.value = false;
     setVaultState("locked");
     status.value = "🔒 Vault locked";
@@ -288,6 +271,7 @@ export function AppSecrets() {
               id: crypto.randomUUID(),
               key,
               value: "",
+              isSaved: true, // Existing secrets are already saved
             })),
           );
         } else {
@@ -305,7 +289,7 @@ export function AppSecrets() {
   }, []);
 
   const addSecret = () => {
-    setSecrets([...secrets, { id: crypto.randomUUID(), key: "", value: "" }]);
+    setSecrets([...secrets, { id: crypto.randomUUID(), key: "", value: "", isSaved: false }]);
   };
 
   const removeSecret = (id: string) => {
@@ -336,7 +320,7 @@ export function AppSecrets() {
 
     try {
       status.value = `Retrieving ${secret.key}...`;
-      const value = await get(secret.key);
+      const value = await secretsCtx.getSecretInternal(secret.key);
 
       if (!value) {
         status.value = `⚠️ Secret "${secret.key}" not found`;
@@ -362,34 +346,42 @@ export function AppSecrets() {
     });
   };
 
-  const handleSaveSecrets = async () => {
-    if (!isInitialized.value) {
+  const handleSaveSecret = async (id: string) => {
+    if (!secretsCtx.isUnlocked) {
       status.value = "⚠️ Please unlock vault first";
       return;
     }
 
+    const secret = secrets.find((s) => s.id === id);
+    if (!secret || !secret.key || !secret.value) {
+      status.value = "⚠️ Both key and value are required";
+      return;
+    }
+
     try {
-      isSaving.value = true;
-      status.value = "Saving secrets...";
+      status.value = `Saving ${secret.key}...`;
 
-      const secretsToSave = secrets.filter((s) => s.key && s.value);
+      // Save the secret (encrypted) to KV storage
+      await secretsCtx.setSecret(secret.key, secret.value);
 
-      // Save each secret (encrypted) to KV storage
-      for (const secret of secretsToSave) {
-        status.value = `Saving ${secret.key}...`;
-        await set(secret.key, secret.value);
+      // Update the list of secret keys in metadata KV
+      const existingKeys = await secretsKV.get(["keys"]);
+      const secretKeys = existingKeys.isOk() && Array.isArray(existingKeys.value())
+        ? existingKeys.value()
+        : [];
+      
+      if (!secretKeys.includes(secret.key)) {
+        secretKeys.push(secret.key);
+        await secretsKV.set(["keys"], secretKeys);
       }
 
-      // Store the list of secret keys in metadata KV
-      const secretKeys = secretsToSave.map((s) => s.key);
-      await secretsKV.set(["keys"], secretKeys);
+      // Mark the secret as saved
+      setSecrets(secrets.map((s) => s.id === id ? { ...s, isSaved: true } : s));
 
-      status.value = `✅ Successfully saved ${secretsToSave.length} secrets`;
+      status.value = `✅ Successfully saved ${secret.key}`;
     } catch (error) {
-      status.value = `❌ Failed to save secrets: ${error}`;
-      console.error("Save secrets error:", error);
-    } finally {
-      isSaving.value = false;
+      status.value = `❌ Failed to save ${secret.key}: ${error}`;
+      console.error("Save secret error:", error);
     }
   };
 
@@ -452,25 +444,41 @@ export function AppSecrets() {
                     />
                   </div>
 
-                  <div class="flex gap-2">
-                    <button
-                      onClick={() =>
-                        isRevealed
-                          ? hideSecret(secret.id)
-                          : retrieveSecret(secret.id)}
-                      class="px-3 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 whitespace-nowrap"
-                      title={isRevealed ? "Hide secret" : "Reveal secret"}
-                    >
-                      {isRevealed ? "👁️‍🗨️ Hide" : "👁️ View"}
-                    </button>
+                  <div class="flex flex-col gap-2">
+                    <div class="flex gap-2">
+                      <button
+                        onClick={() =>
+                          isRevealed
+                            ? hideSecret(secret.id)
+                            : retrieveSecret(secret.id)}
+                        class="px-3 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 whitespace-nowrap"
+                        title={isRevealed ? "Hide secret" : "Reveal secret"}
+                      >
+                        {isRevealed ? "👁️‍🗨️ Hide" : "👁️ View"}
+                      </button>
 
-                    <button
-                      onClick={() => removeSecret(secret.id)}
-                      class="px-3 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600"
-                      title="Remove secret"
-                    >
-                      ✕
-                    </button>
+                      <button
+                        onClick={() => removeSecret(secret.id)}
+                        class="px-3 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                        title="Remove secret"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {!secret.isSaved && (
+                      <button
+                        onClick={() => handleSaveSecret(secret.id)}
+                        disabled={!secret.key || !secret.value}
+                        class={`px-3 py-2 text-sm rounded whitespace-nowrap ${
+                          !secret.key || !secret.value
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            : "bg-green-500 text-white hover:bg-green-600"
+                        }`}
+                        title="Save secret"
+                      >
+                        💾 Save
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -483,20 +491,6 @@ export function AppSecrets() {
           No secrets configured. Click "Add Secret" to get started.
         </div>
       )}
-
-      <div class="flex gap-2 mb-4">
-        <button
-          onClick={handleSaveSecrets}
-          disabled={isSaving.value}
-          class={`px-4 py-2 rounded font-semibold ${
-            isSaving.value
-              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-              : "bg-green-500 text-white hover:bg-green-600"
-          }`}
-        >
-          {isSaving.value ? "Saving..." : "Save All Secrets"}
-        </button>
-      </div>
 
       {status.value && (
         <div class="p-3 bg-gray-100 rounded border border-gray-300">

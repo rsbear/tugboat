@@ -6,6 +6,7 @@ import { input } from "npm:@tugboats/core@0.0.15";
 
 import { signal } from "@preact/signals";
 import { MonacoCtxProvider } from "./common/Monaco.tsx";
+import { AppSecretsCtxProvider } from "./common/AppSecretsContext.tsx";
 import {
   AppPreferencesCtxProvider,
   PrefsEditor,
@@ -20,9 +21,11 @@ const theAlias = signal("");
 
 const AppContexts = (props: { children: ComponentChildren }) => (
   <MonacoCtxProvider>
-    <AppPreferencesCtxProvider>
-      {props.children}
-    </AppPreferencesCtxProvider>
+    <AppSecretsCtxProvider>
+      <AppPreferencesCtxProvider>
+        {props.children}
+      </AppPreferencesCtxProvider>
+    </AppSecretsCtxProvider>
   </MonacoCtxProvider>
 );
 

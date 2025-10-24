@@ -1,43 +1,26 @@
-// pkgs/core/secrets.ts
-type TauriInvoke = (
-  cmd: string,
-  args?: Record<string, unknown>,
-) => Promise<any>;
-
-function getInvoker(): TauriInvoke {
-  const w = globalThis as any;
-  const invoke = w.__TAURI__?.invoke;
-  if (!invoke) {
-    throw new Error("Tauri invoke not available on window.__TAURI__");
-  }
-  return invoke;
-}
-
-function decode(bytes: number[]): string {
-  return new TextDecoder().decode(new Uint8Array(bytes));
-}
+// pkgs/core/src/secrets.ts
 
 /**
- * Read-only secret access for tugboat apps.
- * Host controls secret creation and lifecycle.
+ * Get a secret from the tugboats vault.
+ * The host manages secret storage and encryption.
+ * This function provides read-only, synchronous access for tugboat apps.
+ * 
+ * All secrets are decrypted and cached in memory when the vault is unlocked.
+ * This function reads from that cache, making it fast and synchronous.
+ * 
+ * @param secretKey - The key of the secret to retrieve
+ * @returns The decrypted secret value, or null if not found
+ * @throws If the vault is locked or secrets API is not available
  */
-export async function get(key: string): Promise<string> {
-  const invoke = getInvoker();
+export function getSecret(secretKey: string): string | null {
+  const w = globalThis as any;
+  const getSecretFn = w.__TUGBOAT__?.secrets?.getSecret;
   
-  // Get vault config
-  const config = await invoke("vault_get_config");
-  const { snapshotPath, clientName } = config;
-  
-  // Get secret from stronghold
-  const res: number[] | null = await invoke("plugin:stronghold|get_store_record", {
-    snapshotPath,
-    client: clientName,
-    key,
-  });
-  
-  if (!res) {
-    throw new Error(`Secret "${key}" not found`);
+  if (!getSecretFn) {
+    throw new Error(
+      "Secrets API not available. Ensure the tugboat host has initialized the secrets module."
+    );
   }
   
-  return decode(res);
+  return getSecretFn(secretKey);
 }

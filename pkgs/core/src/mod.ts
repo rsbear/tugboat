@@ -3,6 +3,7 @@
 // Core functionality
 export { input } from "./input.ts";
 export { kv } from "./kv.ts";
+export { getSecret } from "./secrets.ts";
 
 // Types for external consumption
 export type { InputState, ParsedInput, SubmitHandler } from "./input.ts";

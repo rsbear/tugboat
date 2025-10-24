@@ -144,3 +144,19 @@ export async function lockVault(): Promise<void> {
 export function isUnlocked(): boolean {
   return cachedMasterPhrase !== null;
 }
+
+/**
+ * List all secret keys stored in the vault
+ */
+export async function listAllSecrets(): Promise<string[]> {
+  const result = await secretsKV.list([]);
+  
+  if (!result.isOk()) {
+    return [];
+  }
+  
+  const items = result.values();
+  return items
+    .map(item => item.metadata.key[1]) // Skip "secrets" namespace prefix
+    .filter(key => key !== "__canary__"); // Filter out canary
+}

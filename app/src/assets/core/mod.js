@@ -184,6 +184,18 @@ async function kvDelete(baseKey, key) {
   }
 }
 
-export { input, kv };
+// src/secrets.ts
+function getSecret(secretKey) {
+  const w = globalThis;
+  const getSecretFn = w.__TUGBOAT__?.secrets?.getSecret;
+  if (!getSecretFn) {
+    throw new Error(
+      "Secrets API not available. Ensure the tugboat host has initialized the secrets module."
+    );
+  }
+  return getSecretFn(secretKey);
+}
+
+export { getSecret, input, kv };
 //# sourceMappingURL=mod.js.map
 //# sourceMappingURL=mod.js.map

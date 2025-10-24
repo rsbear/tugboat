@@ -37,21 +37,21 @@ const defaultPrefs = {
   apps: [
     {
       alias: "re",
-      github_url: "https://github.com/rsbear/tugboat/tree/main/test_mini_react",
+      github_url: "https://github.com/rsbear/tugboat/tree/main/test-bun-react",
     },
     {
       alias: "sv",
-      github_url: "https://github.com/rsbear/tugboat/tree/main/test_mini_sv",
+      github_url: "https://github.com/rsbear/tugboat/tree/main/test-bun-svelte",
     },
   ],
   clones: [
     {
       alias: "reactapp",
-      github_url: "https://github.com/rsbear/tugboat/tree/main/test_mini_react",
+      github_url: "https://github.com/rsbear/tugboat/tree/main/test-bun-react",
     },
     {
       alias: "svelteapp",
-      github_url: "https://github.com/rsbear/tugboat/tree/main/test_mini_sv",
+      github_url: "https://github.com/rsbear/tugboat/tree/main/test-bun-svelte",
     },
   ],
 } as const;
