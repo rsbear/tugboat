@@ -44,7 +44,7 @@ export async function initVault(passphrase: string): Promise<void> {
     const encryptedCanary = canaryResult.value() as number[];
     try {
       await invoke("decrypt", {
-        encrypted_value: encryptedCanary,
+        encryptedValue: encryptedCanary,
         masterPhrase: passphrase,
       });
       // Decryption succeeded, passphrase is correct
@@ -117,7 +117,7 @@ export async function get(key: string): Promise<string | null> {
 
   // Decrypt the value
   const decrypted: number[] = await invoke("decrypt", {
-    encrypted_value: encrypted,
+    encryptedValue: encrypted,
     masterPhrase: cachedMasterPhrase,
   });
 
