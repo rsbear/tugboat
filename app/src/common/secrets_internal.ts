@@ -1,4 +1,6 @@
 // app/src/common/secrets_internal.ts
+import { kv } from "npm:@tugboats/core@0.0.15";
+
 type TauriInvoke = (
   cmd: string,
   args?: Record<string, unknown>,
@@ -17,78 +19,128 @@ function encode(input: string | Uint8Array): number[] {
   return Array.from(new TextEncoder().encode(input));
 }
 
-export async function initVault(
-  passphrase: string,
-  clientName = "tugboat-core",
-): Promise<void> {
+function decode(bytes: number[]): string {
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+
+// KV namespace for encrypted secrets
+const secretsKV = kv("secrets");
+
+// Master passphrase cached in memory for the session
+let cachedMasterPhrase: string | null = null;
+
+/**
+ * Initialize vault by verifying the master passphrase.
+ * Tests decryption of a canary value if it exists.
+ */
+export async function initVault(passphrase: string): Promise<void> {
   const invoke = getInvoker();
 
-  // First, store the config in our Rust state
-  await invoke("vault_initialize", { vaultPassword: passphrase, clientName });
+  // Check if we have any existing secrets by trying to load the canary
+  const canaryResult = await secretsKV.get(["__canary__"]);
 
-  // Get the config (snapshot path and client name)
-  const config = await invoke("vault_get_config");
-  const { snapshotPath, clientName: storedClientName } = config;
-
-  // Initialize the stronghold plugin
-  await invoke("plugin:stronghold|initialize", {
-    snapshotPath,
-    password: passphrase,
-  });
-
-  // Try to load the client, if it doesn't exist, create it
-  try {
-    await invoke("plugin:stronghold|load_client", {
-      snapshotPath,
-      client: storedClientName,
+  if (canaryResult.isOk() && canaryResult.value() !== null) {
+    // Vault exists, verify passphrase with canary
+    const encryptedCanary = canaryResult.value() as number[];
+    try {
+      await invoke("decrypt", {
+        encrypted_value: encryptedCanary,
+        masterPhrase: passphrase,
+      });
+      // Decryption succeeded, passphrase is correct
+    } catch (e) {
+      throw new Error("Incorrect master passphrase");
+    }
+  } else {
+    // No vault exists yet, create canary
+    const canaryValue = encode("tugboats-vault-canary");
+    const encryptedCanary: number[] = await invoke("encrypt", {
+      value: canaryValue,
+      masterPhrase: passphrase,
     });
-  } catch (e) {
-    // Client doesn't exist, create it
-    await invoke("plugin:stronghold|create_client", {
-      snapshotPath,
-      client: storedClientName,
-    });
+    await secretsKV.set(["__canary__"], encryptedCanary);
   }
+
+  // Cache the passphrase for this session
+  cachedMasterPhrase = passphrase;
 }
 
-export async function saveVault(): Promise<void> {
-  const invoke = getInvoker();
-  const config = await invoke("vault_get_config");
-  const { snapshotPath } = config;
-
-  await invoke("plugin:stronghold|save", { snapshotPath });
+/**
+ * Check if vault file/canary exists
+ */
+export async function vaultExists(): Promise<boolean> {
+  const canaryResult = await secretsKV.get(["__canary__"]);
+  return canaryResult.isOk() && canaryResult.value() !== null;
 }
 
+/**
+ * Set an encrypted secret in KV storage
+ */
 export async function set(
   key: string,
   value: string | Uint8Array,
 ): Promise<void> {
-  const invoke = getInvoker();
-  const config = await invoke("vault_get_config");
-  const { snapshotPath, clientName } = config;
+  if (!cachedMasterPhrase) {
+    throw new Error("Vault not initialized. Call initVault first.");
+  }
 
-  await invoke("plugin:stronghold|save_store_record", {
-    snapshotPath,
-    client: clientName,
-    key,
-    value: encode(value),
-    lifetime: null,
+  const invoke = getInvoker();
+  const plaintext = encode(value);
+
+  // Encrypt the value
+  const encrypted: number[] = await invoke("encrypt", {
+    value: plaintext,
+    masterPhrase: cachedMasterPhrase,
   });
+
+  // Store in KV
+  await secretsKV.set([key], encrypted);
 }
 
+/**
+ * Get and decrypt a secret from KV storage
+ */
+export async function get(key: string): Promise<string | null> {
+  if (!cachedMasterPhrase) {
+    throw new Error("Vault not initialized. Call initVault first.");
+  }
+
+  const invoke = getInvoker();
+
+  // Load from KV
+  const result = await secretsKV.get([key]);
+  if (!result.isOk() || result.value() === null) {
+    return null;
+  }
+
+  const encrypted = result.value() as number[];
+
+  // Decrypt the value
+  const decrypted: number[] = await invoke("decrypt", {
+    encrypted_value: encrypted,
+    masterPhrase: cachedMasterPhrase,
+  });
+
+  return decode(decrypted);
+}
+
+/**
+ * Remove a secret from KV storage
+ */
 export async function remove(key: string): Promise<void> {
-  const invoke = getInvoker();
-  const config = await invoke("vault_get_config");
-  const { snapshotPath, clientName } = config;
-
-  await invoke("plugin:stronghold|remove_store_record", {
-    snapshotPath,
-    client: clientName,
-    key,
-  });
+  await secretsKV.delete([key]);
 }
 
-export async function destroyVaultSession(): Promise<void> {
-  const invoke = getInvoker();
-  await invoke("vault_destroy");
+/**
+ * Clear the cached master passphrase (lock the vault)
+ */
+export async function lockVault(): Promise<void> {
+  cachedMasterPhrase = null;
+}
+
+/**
+ * Check if vault is currently unlocked
+ */
+export function isUnlocked(): boolean {
+  return cachedMasterPhrase !== null;
 }

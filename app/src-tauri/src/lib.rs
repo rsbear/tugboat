@@ -13,7 +13,7 @@ pub mod devserver;
 pub mod git_url_parser;
 pub mod jsrun;
 pub mod kv;
-pub mod secrets_vault;
+pub mod encryptions;
 pub mod window;
 
 pub const SPOTLIGHT_LABEL: &str = "main";
@@ -236,21 +236,11 @@ pub fn run() {
             kv::kv_set,
             kv::kv_list,
             kv::kv_delete,
-            // --- Secrets Vault Commands ---
-            secrets_vault::vault_initialize,
-            secrets_vault::vault_get_config,
-            secrets_vault::secret_set,
-            secrets_vault::secret_get,
-            secrets_vault::secret_remove,
-            secrets_vault::vault_save,
-            secrets_vault::vault_destroy
+            // --- Encryption Commands ---
+            encryptions::encrypt,
+            encryptions::decrypt
         ])
         .setup(move |app| {
-            // Initialize secrets vault
-            if let Err(e) = secrets_vault::init_vault_plugin(&app.handle()) {
-                eprintln!("Failed to initialize secrets vault: {}", e);
-            }
-
             // Initialize KV database in background
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

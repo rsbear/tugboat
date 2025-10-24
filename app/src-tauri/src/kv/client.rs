@@ -1,11 +1,13 @@
 use sqlx::sqlite::SqlitePool;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 static DB_POOL: Mutex<Option<SqlitePool>> = Mutex::new(None);
 
-pub async fn initialize_kv_db(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let app_data_dir = app.path().app_data_dir()?;
+pub async fn initialize_kv_db(_app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    // Use ~/.tugboats directory for all data (consistent with encryption salt)
+    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+    let app_data_dir = home.join(".tugboats");
     std::fs::create_dir_all(&app_data_dir)?;
 
     let db_path = app_data_dir.join("tugboats.db");
@@ -153,10 +155,8 @@ pub async fn reset_kv_db(app: &AppHandle) -> Result<(), String> {
     }
 
     // Delete the SQLite file
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+    let app_data_dir = home.join(".tugboats");
     let db_path = app_data_dir.join("tugboats.db");
 
     if db_path.exists() {

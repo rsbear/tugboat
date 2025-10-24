@@ -1,34 +1,370 @@
 import { signal } from "@preact/signals";
-import { initVault, set, saveVault } from "./common/secrets_internal.ts";
+import { useEffect, useState } from "preact/hooks";
+import {
+  initVault,
+  set,
+  get,
+  vaultExists,
+  lockVault,
+  isUnlocked,
+} from "./common/secrets_internal.ts";
 
-// Test secrets
-const testSecrets = [
-  { key: "github_token", value: "ghp_test_token_123456789" },
-  { key: "api_key", value: "sk_test_api_key_abcdefg" },
-];
+import { kv } from "npm:@tugboats/core@0.0.15";
+
+/**
+ * Read-only secret access for tugboat apps.
+ * Host controls secret creation and lifecycle.
+ */
+export async function getSecret(key: string): Promise<string> {
+  const value = await get(key);
+  if (!value) {
+    throw new Error(`Secret "${key}" not found`);
+  }
+  return value;
+}
+
+interface SecretEntry {
+  id: string;
+  key: string;
+  value: string;
+}
 
 const status = signal("");
 const isInitialized = signal(false);
 const isSaving = signal(false);
 
-export function AppSecrets() {
-  const handleInitializeVault = async () => {
-    try {
-      status.value = "Initializing vault...";
-      // For testing, use a simple passphrase
-      // In production, this should be user-provided
-      await initVault("test-passphrase-123", "tugboat-core");
-      isInitialized.value = true;
-      status.value = "✅ Vault initialized successfully";
-    } catch (error) {
-      status.value = `❌ Failed to initialize vault: ${error}`;
-      console.error("Vault initialization error:", error);
+// KV table for storing secret keys (not values)
+const secretsKV = kv("secrets-metadata");
+
+type VaultState = "setup" | "locked" | "unlocked";
+
+// PassphraseSetup Component
+function PassphraseSetup({ onSetupComplete }: { onSetupComplete: () => void }) {
+  const [passphrase, setPassphrase] = useState("");
+  const [confirmPassphrase, setConfirmPassphrase] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSetup = async (e: Event) => {
+    e.preventDefault();
+    setError("");
+
+    if (passphrase.length < 3) {
+      setError("Passphrase must be at least 3 characters");
+      return;
     }
+
+    if (passphrase !== confirmPassphrase) {
+      setError("Passphrases do not match");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      status.value = "Setting up vault...";
+
+      // Initialize the vault with the user's passphrase
+      await initVault(passphrase);
+
+      isInitialized.value = true;
+      status.value = "✅ Vault setup complete";
+      onSetupComplete();
+    } catch (err) {
+      setError(`Failed to setup vault: ${err}`);
+      status.value = `❌ Setup failed: ${err}`;
+      console.error("Vault setup error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div class="p-6 bg-white rounded-lg shadow-md max-w-md mx-auto">
+      <h2 class="text-2xl font-bold mb-2">Setup Vault</h2>
+      <p class="text-sm text-gray-600 mb-4">
+        Create a master passphrase to secure your secrets
+      </p>
+
+      <form onSubmit={handleSetup} class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1" for="passphrase">
+            Master Passphrase
+          </label>
+          <input
+            id="passphrase"
+            type="password"
+            value={passphrase}
+            onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
+            class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="At least 3 characters"
+            disabled={isLoading}
+            autoFocus
+          />
+        </div>
+
+        <div>
+          <label
+            class="block text-sm font-semibold mb-1"
+            for="confirmPassphrase"
+          >
+            Confirm Passphrase
+          </label>
+          <input
+            id="confirmPassphrase"
+            type="password"
+            value={confirmPassphrase}
+            onInput={(e) =>
+              setConfirmPassphrase((e.target as HTMLInputElement).value)}
+            class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Re-enter passphrase"
+            disabled={isLoading}
+          />
+        </div>
+
+        {error && (
+          <div class="p-3 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isLoading || !passphrase || !confirmPassphrase}
+          class={`w-full px-4 py-2 rounded font-semibold ${
+            isLoading || !passphrase || !confirmPassphrase
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+              : "bg-blue-500 text-white hover:bg-blue-600"
+          }`}
+        >
+          {isLoading ? "Setting up..." : "Create Vault"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// UnlockVault Component
+function UnlockVault({ onUnlockSuccess }: { onUnlockSuccess: () => void }) {
+  const [passphrase, setPassphrase] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleUnlock = async (e: Event) => {
+    e.preventDefault();
+    setError("");
+
+    if (!passphrase) {
+      setError("Please enter your passphrase");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      status.value = "Unlocking vault...";
+
+      // Try to initialize/unlock the vault with the passphrase
+      await initVault(passphrase);
+
+      isInitialized.value = true;
+      status.value = "✅ Vault unlocked";
+      onUnlockSuccess();
+    } catch (err) {
+      setError("Incorrect passphrase or vault corrupted");
+      status.value = `❌ Failed to unlock: ${err}`;
+      console.error("Vault unlock error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div class="p-6 bg-white rounded-lg shadow-md max-w-md mx-auto">
+      <h2 class="text-2xl font-bold mb-2">Unlock Vault</h2>
+      <p class="text-sm text-gray-600 mb-4">
+        Enter your master passphrase to access secrets
+      </p>
+
+      <form onSubmit={handleUnlock} class="space-y-4">
+        <div>
+          <label
+            class="block text-sm font-semibold mb-1"
+            for="unlock-passphrase"
+          >
+            Master Passphrase
+          </label>
+          <input
+            id="unlock-passphrase"
+            type="password"
+            value={passphrase}
+            onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
+            class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter your passphrase"
+            disabled={isLoading}
+            autoFocus
+          />
+        </div>
+
+        {error && (
+          <div class="p-3 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isLoading || !passphrase}
+          class={`w-full px-4 py-2 rounded font-semibold ${
+            isLoading || !passphrase
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+              : "bg-green-500 text-white hover:bg-green-600"
+          }`}
+        >
+          {isLoading ? "Unlocking..." : "Unlock Vault"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export function AppSecrets() {
+  const [vaultState, setVaultState] = useState<VaultState>("setup");
+
+  // Check vault setup state on mount by checking if canary exists in KV
+  useEffect(() => {
+    const checkVaultState = async () => {
+      try {
+        const exists = await vaultExists();
+        if (exists) {
+          setVaultState("locked");
+        }
+      } catch (err) {
+        console.error("Failed to check vault state:", err);
+      }
+    };
+    checkVaultState();
+  }, []);
+
+  const handleSetupComplete = () => {
+    setVaultState("unlocked");
+  };
+
+  const handleUnlockSuccess = () => {
+    setVaultState("unlocked");
+  };
+
+  const handleLockVault = async () => {
+    await lockVault();
+    isInitialized.value = false;
+    setVaultState("locked");
+    status.value = "🔒 Vault locked";
+  };
+
+  // Show setup screen if vault not configured
+  if (vaultState === "setup") {
+    return <PassphraseSetup onSetupComplete={handleSetupComplete} />;
+  }
+
+  // Show unlock screen if vault is locked
+  if (vaultState === "locked") {
+    return <UnlockVault onUnlockSuccess={handleUnlockSuccess} />;
+  }
+
+  // Vault is unlocked, show secrets manager
+  const [secrets, setSecrets] = useState<SecretEntry[]>([]);
+  const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(
+    new Set(),
+  );
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load existing secret keys from KV on mount
+  useEffect(() => {
+    const loadSecretKeys = async () => {
+      try {
+        const keys = await secretsKV.get(["keys"]);
+        console.log("keys.value", keys.value());
+        if (keys.isOk() && Array.isArray(keys.value())) {
+          setSecrets(
+            keys.value().map((key: string) => ({
+              id: crypto.randomUUID(),
+              key,
+              value: "",
+            })),
+          );
+        } else {
+          // No existing secrets, start with one empty row
+          setSecrets([{ id: crypto.randomUUID(), key: "", value: "" }]);
+        }
+      } catch (error) {
+        console.error("Failed to load secret keys:", error);
+        setSecrets([{ id: crypto.randomUUID(), key: "", value: "" }]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSecretKeys();
+  }, []);
+
+  const addSecret = () => {
+    setSecrets([...secrets, { id: crypto.randomUUID(), key: "", value: "" }]);
+  };
+
+  const removeSecret = (id: string) => {
+    setSecrets(secrets.filter((s) => s.id !== id));
+    setRevealedSecrets((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const updateSecret = (
+    id: string,
+    field: "key" | "value",
+    newValue: string,
+  ) => {
+    setSecrets(
+      secrets.map((s) => (s.id === id ? { ...s, [field]: newValue } : s)),
+    );
+  };
+
+  const retrieveSecret = async (id: string) => {
+    const secret = secrets.find((s) => s.id === id);
+    if (!secret || !secret.key) {
+      status.value = "⚠️ Secret key is empty";
+      return;
+    }
+
+    try {
+      status.value = `Retrieving ${secret.key}...`;
+      const value = await get(secret.key);
+
+      if (!value) {
+        status.value = `⚠️ Secret "${secret.key}" not found`;
+        return;
+      }
+
+      // Update the secret value in state
+      setSecrets(secrets.map((s) => s.id === id ? { ...s, value } : s));
+
+      setRevealedSecrets((prev) => new Set(prev).add(id));
+      status.value = `✅ Retrieved ${secret.key}`;
+    } catch (error) {
+      status.value = `❌ Failed to retrieve ${secret.key}: ${error}`;
+      console.error("Retrieve secret error:", error);
+    }
+  };
+
+  const hideSecret = (id: string) => {
+    setRevealedSecrets((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const handleSaveSecrets = async () => {
     if (!isInitialized.value) {
-      status.value = "⚠️ Please initialize vault first";
+      status.value = "⚠️ Please unlock vault first";
       return;
     }
 
@@ -36,15 +372,19 @@ export function AppSecrets() {
       isSaving.value = true;
       status.value = "Saving secrets...";
 
-      // Loop over test secrets and save them
-      for (const secret of testSecrets) {
+      const secretsToSave = secrets.filter((s) => s.key && s.value);
+
+      // Save each secret (encrypted) to KV storage
+      for (const secret of secretsToSave) {
         status.value = `Saving ${secret.key}...`;
         await set(secret.key, secret.value);
       }
 
-      // Save the vault to disk
-      await saveVault();
-      status.value = `✅ Successfully saved ${testSecrets.length} secrets`;
+      // Store the list of secret keys in metadata KV
+      const secretKeys = secretsToSave.map((s) => s.key);
+      await secretsKV.set(["keys"], secretKeys);
+
+      status.value = `✅ Successfully saved ${secretsToSave.length} secrets`;
     } catch (error) {
       status.value = `❌ Failed to save secrets: ${error}`;
       console.error("Save secrets error:", error);
@@ -55,37 +395,101 @@ export function AppSecrets() {
 
   return (
     <div class="p-4 bg-white rounded-lg shadow-md">
-      <h2 class="text-2xl font-bold mb-4">Secrets Manager</h2>
-
-      <div class="mb-4">
-        <h3 class="text-lg font-semibold mb-2">Test Secrets:</h3>
-        <ul class="list-disc list-inside space-y-1 mb-4">
-          {testSecrets.map((secret) => (
-            <li key={secret.key} class="font-mono text-sm">
-              <span class="font-semibold">{secret.key}</span>: {secret.value}
-            </li>
-          ))}
-        </ul>
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold">Secrets Manager</h2>
+        <div class="flex gap-2">
+          <button
+            onClick={addSecret}
+            class="px-3 py-1 text-sm rounded font-semibold bg-blue-500 text-white hover:bg-blue-600"
+          >
+            + Add Secret
+          </button>
+          <button
+            onClick={handleLockVault}
+            class="px-3 py-1 text-sm rounded font-semibold bg-gray-500 text-white hover:bg-gray-600"
+          >
+            🔒 Lock Vault
+          </button>
+        </div>
       </div>
+
+      {isLoading
+        ? <div class="text-center py-8 text-gray-500">Loading secrets...</div>
+        : (
+          <div class="space-y-3 mb-4">
+            {secrets.map((secret) => {
+              const isRevealed = revealedSecrets.has(secret.id);
+
+              return (
+                <div
+                  key={secret.id}
+                  class="flex gap-3 items-start p-3 border border-gray-200 rounded-lg bg-gray-50"
+                >
+                  <div class="flex-1 space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Key (e.g., API_KEY, GITHUB_TOKEN)"
+                      value={secret.key}
+                      onInput={(e) =>
+                        updateSecret(
+                          secret.id,
+                          "key",
+                          (e.target as HTMLInputElement).value,
+                        )}
+                      class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type={isRevealed ? "text" : "password"}
+                      placeholder="Value"
+                      value={secret.value}
+                      onInput={(e) =>
+                        updateSecret(
+                          secret.id,
+                          "value",
+                          (e.target as HTMLInputElement).value,
+                        )}
+                      class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div class="flex gap-2">
+                    <button
+                      onClick={() =>
+                        isRevealed
+                          ? hideSecret(secret.id)
+                          : retrieveSecret(secret.id)}
+                      class="px-3 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 whitespace-nowrap"
+                      title={isRevealed ? "Hide secret" : "Reveal secret"}
+                    >
+                      {isRevealed ? "👁️‍🗨️ Hide" : "👁️ View"}
+                    </button>
+
+                    <button
+                      onClick={() => removeSecret(secret.id)}
+                      class="px-3 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                      title="Remove secret"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      {!isLoading && secrets.length === 0 && (
+        <div class="text-center py-8 text-gray-500">
+          No secrets configured. Click "Add Secret" to get started.
+        </div>
+      )}
 
       <div class="flex gap-2 mb-4">
         <button
-          onClick={handleInitializeVault}
-          disabled={isInitialized.value}
-          class={`px-4 py-2 rounded font-semibold ${
-            isInitialized.value
-              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-              : "bg-blue-500 text-white hover:bg-blue-600"
-          }`}
-        >
-          {isInitialized.value ? "✓ Vault Initialized" : "Initialize Vault"}
-        </button>
-
-        <button
           onClick={handleSaveSecrets}
-          disabled={!isInitialized.value || isSaving.value}
+          disabled={isSaving.value}
           class={`px-4 py-2 rounded font-semibold ${
-            !isInitialized.value || isSaving.value
+            isSaving.value
               ? "bg-gray-300 text-gray-500 cursor-not-allowed"
               : "bg-green-500 text-white hover:bg-green-600"
           }`}
