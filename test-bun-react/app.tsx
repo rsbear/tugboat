@@ -7,7 +7,7 @@ console.log("input", input);
 
 // The App now receives the Harbor API as a prop, allowing it to interact
 // with the main application shell.
-function App() {
+export default function App() {
   const [thing, setThing] = React.useState("");
   const [lastSubmit, setLastSubmit] = React.useState<
     {
@@ -65,10 +65,4 @@ function App() {
       )}
     </div>
   );
-}
-
-export function tugboatReact(targetElement: HTMLElement) {
-  const root = ReactDOM.createRoot(targetElement);
-  root.render(<App />);
-  return root;
 }

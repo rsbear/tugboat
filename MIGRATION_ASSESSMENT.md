@@ -773,14 +773,14 @@ If CDN dependency is problematic, add phase 2 feature:
 
 **New Pattern React App:**
 ```bash
-test-apps/new-react/
+test-bun-react/
 ├── package.json
 └── app.tsx  # export default function App() { ... }
 ```
 
 **New Pattern Svelte App:**
 ```bash
-test-apps/new-svelte/
+test-bun-svelte/
 ├── package.json
 └── App.svelte
 ```

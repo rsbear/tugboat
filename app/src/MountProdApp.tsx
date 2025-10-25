@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "preact/hooks";
+import { injectImportMap, mountNewPattern, tryLegacyMount } from "./mount_utils.ts";
 
 // @ts-ignore - sh
 const { invoke } = window.__TAURI__.core;
@@ -17,19 +18,34 @@ export function MountProdApp(props: { alias: string }) {
       try {
         console.log("🚢 DEBUG: Invoking latest_bundle_for_alias with:", alias);
 
-        // Find latest bundle for alias
+        // 1. Get bundle path and metadata
         const path = await invoke("latest_bundle_for_alias", { alias });
         console.log("🚢 DEBUG: Bundle path received:", path);
 
+        // 2. Try to fetch metadata (contains framework and import map)
+        let metadata: any = null;
+        try {
+          metadata = await invoke("read_bundle_metadata", { alias });
+          console.log("🚢 DEBUG: Metadata loaded:", metadata);
+        } catch (metaErr) {
+          console.warn("🚢 DEBUG: No metadata found, assuming legacy bundle");
+        }
+
+        // 3. Inject import map if available
+        if (metadata?.importmap) {
+          injectImportMap(alias, metadata.importmap);
+        }
+
+        // 4. Load bundle
         const code = await invoke("read_text_file", { path });
         console.log("🚢 DEBUG: Bundle code length:", code?.length || 0);
 
-        // Import the ESM bundle via blob URL
         const blob = new Blob([code], { type: "text/javascript" });
         const url = URL.createObjectURL(blob);
         console.log("🚢 DEBUG: Created blob URL:", url);
 
         const mod = await import(url);
+        URL.revokeObjectURL(url);
         console.log("🚢 DEBUG: Module imported, exports:", Object.keys(mod));
 
         if (!mounted || !slotRef.current) return;
@@ -37,33 +53,21 @@ export function MountProdApp(props: { alias: string }) {
         const slot = slotRef.current;
         let cleanup: (() => void) | null = null;
 
-        if (mod && typeof mod.harborMount === "function") {
-          console.log("🚢 DEBUG: Using harborMount");
-          mod.harborMount(slot);
-          if (typeof mod.unmount === "function") {
-            cleanup = () => {
-              try {
-                mod.unmount();
-              } catch {}
-            };
-          }
-        } else if (mod && typeof mod.tugboatReact === "function") {
-          console.log("🚢 DEBUG: Using tugboatReact");
-          const res = mod.tugboatReact(slot);
-          if (typeof res === "function") cleanup = res;
-        } else if (mod && typeof mod.tugboatSvelte === "function") {
-          console.log("🚢 DEBUG: Using tugboatSvelte");
-          const res = mod.tugboatSvelte(slot);
-          if (typeof res === "function") cleanup = res;
-        } else if (mod && typeof mod.default === "function") {
-          console.log("🚢 DEBUG: Using default export");
-          const res = mod.default(slot);
-          if (typeof res === "function") cleanup = res;
+        // 5. Try new pattern first (if metadata exists)
+        if (metadata?.framework && mod.default) {
+          console.log("🚢 DEBUG: Using new pattern with framework:", metadata.framework);
+          cleanup = await mountNewPattern(mod, metadata.framework, slot, alias);
         } else {
-          console.warn(
-            "No recognized tugboat/harbor mount export found in bundle for alias:",
-            alias,
-          );
+          // 6. Fall back to legacy patterns
+          console.log("🚢 DEBUG: Trying legacy mount patterns");
+          cleanup = await tryLegacyMount(mod, slot);
+          
+          if (!cleanup) {
+            console.warn(
+              "No recognized mount pattern found in bundle for alias:",
+              alias,
+            );
+          }
         }
 
         cleanupRef.current = cleanup;

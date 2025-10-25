@@ -225,6 +225,7 @@ pub fn run() {
             bundler::bundle_app,
             bundler::latest_bundle_for_alias,
             bundler::read_text_file,
+            bundler::read_bundle_metadata,
             // --- Dev Server Commands ---
             devserver::start_dev,
             devserver::stop_dev,
