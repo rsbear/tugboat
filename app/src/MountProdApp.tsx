@@ -53,10 +53,13 @@ export function MountProdApp(props: { alias: string }) {
         const slot = slotRef.current;
         let cleanup: (() => void) | null = null;
 
-        // 5. Try new pattern first (if metadata exists)
-        if (metadata?.framework && mod.default) {
+        // 5. Try new pattern first (bundled mountComponent function)
+        if (typeof mod.mountComponent === 'function') {
+          console.log("🚢 DEBUG: Using bundled mountComponent");
+          cleanup = mod.mountComponent(slot);
+        } else if (metadata?.framework && metadata?.mount_utils_path && mod.default) {
           console.log("🚢 DEBUG: Using new pattern with framework:", metadata.framework);
-          cleanup = await mountNewPattern(mod, metadata.framework, slot, alias);
+          cleanup = await mountNewPattern(mod, metadata.framework, slot, metadata.mount_utils_path);
         } else {
           // 6. Fall back to legacy patterns
           console.log("🚢 DEBUG: Trying legacy mount patterns");

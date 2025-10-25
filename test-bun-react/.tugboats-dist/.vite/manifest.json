@@ -1,8 +1,8 @@
 {
-  "app.tsx": {
+  ".tugboats-mount-wrapper.js": {
     "file": "reactapp-dev.js",
-    "name": "app",
-    "src": "app.tsx",
+    "name": ".tugboats-mount-wrapper",
+    "src": ".tugboats-mount-wrapper.js",
     "isEntry": true
   }
 }

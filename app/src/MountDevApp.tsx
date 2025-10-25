@@ -101,10 +101,13 @@ export function MountDevApp(props: { alias: string }) {
 
       let dispose: (() => void) | null = null;
 
-      // 4. Try new pattern first (if metadata exists)
-      if (metadata?.framework && mod.default) {
+      // 4. Try bundled mountComponent function first
+      if (typeof mod.mountComponent === 'function') {
+        console.log("🚢 DEBUG: Using bundled mountComponent");
+        dispose = mod.mountComponent(slotRef.current);
+      } else if (metadata?.framework && metadata?.mount_utils_path && mod.default) {
         console.log("🚢 DEBUG: Using new pattern with framework:", metadata.framework);
-        dispose = await mountNewPattern(mod, metadata.framework, slotRef.current, alias);
+        dispose = await mountNewPattern(mod, metadata.framework, slotRef.current, metadata.mount_utils_path);
       } else {
         // 5. Fall back to legacy patterns
         console.log("🚢 DEBUG: Trying legacy mount patterns");

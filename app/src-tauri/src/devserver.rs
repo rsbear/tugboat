@@ -93,6 +93,13 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
     // Detect framework using entry file and package.json
     let framework = detect_framework(&pkg, &entry_rel);
 
+    // Generate mount wrapper that imports the app and provides mount function
+    let mount_wrapper = generate_mount_wrapper(&entry_rel, &framework);
+    let mount_wrapper_path = project_dir.join(".tugboats-mount-wrapper.js");
+    tokio::fs::write(&mount_wrapper_path, mount_wrapper)
+        .await
+        .map_err(|e| format!("Failed to write mount wrapper: {}", e))?;
+
     // Ensure vite and framework plugin present
     runtime.install_dev(&["vite"], &project_dir).await?;
     match framework.as_str() {
@@ -112,7 +119,7 @@ pub async fn start_dev(manager: State<'_, DevServerManager>, alias: String) -> R
     // Bundle name for dev mode
     let bundle_file = format!("{}-dev.js", alias);
 
-    // Write temporary vite.config.mjs for build
+    // Write temporary vite.config.mjs for build - use mount wrapper as entry
     let vite_config = match framework.as_str() {
         "svelte" => format!(
             r#"import {{ svelte }} from '@sveltejs/vite-plugin-svelte';
@@ -125,7 +132,7 @@ export default {{
     sourcemap: false,
     manifest: true,
     lib: {{
-      entry: './{entry}',
+      entry: './.tugboats-mount-wrapper.js',
       formats: ['es'],
       fileName: () => '{bundle_file}'
     }},
@@ -135,7 +142,6 @@ export default {{
   }}
 }};
 "#,
-            entry = entry_rel,
             bundle_file = bundle_file
         ),
         "react" => format!(
@@ -149,7 +155,7 @@ export default {{
     sourcemap: false,
     manifest: true,
     lib: {{
-      entry: './{entry}',
+      entry: './.tugboats-mount-wrapper.js',
       formats: ['es'],
       fileName: () => '{bundle_file}'
     }},
@@ -159,7 +165,6 @@ export default {{
   }}
 }};
 "#,
-            entry = entry_rel,
             bundle_file = bundle_file
         ),
         other => return Err(format!("Unsupported framework for dev: {}", other)),
@@ -327,7 +332,7 @@ async fn build_dev_bundle(
     let entry_rel = resolve_tugboats_entry(project_dir)?;
     let framework = detect_framework(&pkg, &entry_rel);
     let importmap = generate_importmap(&pkg, &framework);
-    let mount_utils = generate_mount_utils(&framework);
+    let mount_utils = generate_mount_utils(&pkg, &framework);
 
     // Save to bundles directory
     let home = dirs::home_dir().ok_or("No home directory found")?;
@@ -338,25 +343,26 @@ async fn build_dev_bundle(
     let bundle_path = bundles_dir.join(bundle_file);
     std::fs::write(&bundle_path, &js_code).map_err(|e| format!("Failed to write bundle: {}", e))?;
 
-    // Save metadata with import map
+    // Save mount utils (framework-specific mounting code)
+    let mount_utils_file = format!("{}.mount-utils.js", alias);
+    let mount_utils_path = bundles_dir.join(&mount_utils_file);
+    std::fs::write(&mount_utils_path, mount_utils)
+        .map_err(|e| format!("Failed to write mount utils: {}", e))?;
+
+    // Save metadata with import map and mount utils path
     let meta_file = format!("{}.meta.json", alias);
     let meta_path = bundles_dir.join(&meta_file);
     
     let metadata = serde_json::json!({
         "framework": framework,
         "alias": alias,
-        "importmap": importmap
+        "importmap": importmap,
+        "mount_utils_path": mount_utils_path.to_string_lossy().to_string()
     });
     
     std::fs::write(&meta_path, serde_json::to_string_pretty(&metadata)
         .map_err(|e| format!("Failed to serialize metadata: {}", e))?)
         .map_err(|e| format!("Failed to write metadata: {}", e))?;
-
-    // Save mount utils (framework-specific mounting code)
-    let mount_utils_file = format!("{}.mount-utils.js", alias);
-    let mount_utils_path = bundles_dir.join(&mount_utils_file);
-    std::fs::write(&mount_utils_path, mount_utils)
-        .map_err(|e| format!("Failed to write mount utils: {}", e))?;
 
     manager.app_handle.emit("dev:build_completed", alias).ok();
 
@@ -553,49 +559,142 @@ fn resolve_tugboats_entry(repo_dir: &Path) -> Result<String, String> {
     )
 }
 
+fn generate_mount_wrapper(entry_rel: &str, framework: &str) -> String {
+    // Generate a wrapper that imports the app component and exports a mount function
+    match framework {
+        "react" => format!(r#"
+import {{ createRoot }} from 'react-dom/client';
+import {{ createElement }} from 'react';
+import App from './{}';
+
+export function mountComponent(slot) {{
+  const root = createRoot(slot);
+  root.render(createElement(App));
+  return () => root.unmount();
+}}
+
+// Also export default for new pattern
+export default App;
+"#, entry_rel),
+        "preact" => format!(r#"
+import {{ render }} from 'preact';
+import {{ createElement }} from 'preact';
+import App from './{}';
+
+export function mountComponent(slot) {{
+  render(createElement(App), slot);
+  return () => render(null, slot);
+}}
+
+// Also export default for new pattern
+export default App;
+"#, entry_rel),
+        "svelte" => format!(r#"
+import {{ mount, unmount }} from 'svelte';
+import App from './{}';
+
+export function mountComponent(slot) {{
+  const instance = mount(App, {{ target: slot }});
+  return () => unmount(instance);
+}}
+
+// Also export default for new pattern
+export default App;
+"#, entry_rel),
+        "solidjs" => format!(r#"
+import {{ render }} from 'solid-js/web';
+import App from './{}';
+
+export function mountComponent(slot) {{
+  const dispose = render(() => App({{}}), slot);
+  return () => dispose();
+}}
+
+// Also export default for new pattern
+export default App;
+"#, entry_rel),
+        "vue" => format!(r#"
+import {{ createApp }} from 'vue';
+import App from './{}';
+
+export function mountComponent(slot) {{
+  const app = createApp(App);
+  app.mount(slot);
+  return () => app.unmount();
+}}
+
+// Also export default for new pattern
+export default App;
+"#, entry_rel),
+        _ => format!(r#"
+import App from './{}';
+
+export function mountComponent(slot) {{
+  console.warn('Unknown framework, attempting basic mount');
+  if (typeof App === 'function') {{
+    const el = App();
+    if (el && typeof el === 'object' && 'render' in el) {{
+      slot.appendChild(el.render());
+    }}
+  }}
+  return () => {{ slot.innerHTML = ''; }};
+}}
+
+// Also export default for new pattern
+export default App;
+"#, entry_rel),
+    }
+}
+
+fn get_package_version(pkg: &PackageJson, package_name: &str) -> Option<String> {
+    pkg.dependencies.get(package_name)
+        .or_else(|| pkg.dev_dependencies.get(package_name))
+        .map(|v| v.clone())
+}
+
 fn generate_importmap(pkg: &PackageJson, framework: &str) -> serde_json::Value {
     let mut imports = serde_json::Map::new();
     
-    // Map framework to its ESM import paths
+    // Map framework to its ESM import paths using actual versions from package.json
     match framework {
         "react" => {
-            if pkg.dependencies.contains_key("react") || pkg.dev_dependencies.contains_key("react") {
+            if let Some(react_version) = get_package_version(pkg, "react") {
                 imports.insert("react".to_string(), 
-                    serde_json::json!("https://esm.sh/react@18.3.0"));
+                    serde_json::json!(format!("https://esm.sh/react@{}", react_version)));
             }
-            if pkg.dependencies.contains_key("react-dom") || pkg.dev_dependencies.contains_key("react-dom") {
+            if let Some(react_dom_version) = get_package_version(pkg, "react-dom") {
                 imports.insert("react-dom".to_string(), 
-                    serde_json::json!("https://esm.sh/react-dom@18.3.0"));
+                    serde_json::json!(format!("https://esm.sh/react-dom@{}", react_dom_version)));
                 imports.insert("react-dom/client".to_string(), 
-                    serde_json::json!("https://esm.sh/react-dom@18.3.0/client"));
+                    serde_json::json!(format!("https://esm.sh/react-dom@{}/client", react_dom_version)));
             }
         },
         "svelte" => {
-            if pkg.dependencies.contains_key("svelte") || pkg.dev_dependencies.contains_key("svelte") {
+            if let Some(svelte_version) = get_package_version(pkg, "svelte") {
                 imports.insert("svelte".to_string(), 
-                    serde_json::json!("https://esm.sh/svelte@5.0.0"));
+                    serde_json::json!(format!("https://esm.sh/svelte@{}", svelte_version)));
             }
         },
         "preact" => {
-            if pkg.dependencies.contains_key("preact") || pkg.dev_dependencies.contains_key("preact") {
+            if let Some(preact_version) = get_package_version(pkg, "preact") {
                 imports.insert("preact".to_string(), 
-                    serde_json::json!("https://esm.sh/preact@10.19.0"));
+                    serde_json::json!(format!("https://esm.sh/preact@{}", preact_version)));
                 imports.insert("preact/compat".to_string(), 
-                    serde_json::json!("https://esm.sh/preact@10.19.0/compat"));
+                    serde_json::json!(format!("https://esm.sh/preact@{}/compat", preact_version)));
             }
         },
         "solidjs" => {
-            if pkg.dependencies.contains_key("solid-js") || pkg.dev_dependencies.contains_key("solid-js") {
+            if let Some(solid_version) = get_package_version(pkg, "solid-js") {
                 imports.insert("solid-js".to_string(), 
-                    serde_json::json!("https://esm.sh/solid-js@1.9.0"));
+                    serde_json::json!(format!("https://esm.sh/solid-js@{}", solid_version)));
                 imports.insert("solid-js/web".to_string(), 
-                    serde_json::json!("https://esm.sh/solid-js@1.9.0/web"));
+                    serde_json::json!(format!("https://esm.sh/solid-js@{}/web", solid_version)));
             }
         },
         "vue" => {
-            if pkg.dependencies.contains_key("vue") || pkg.dev_dependencies.contains_key("vue") {
+            if let Some(vue_version) = get_package_version(pkg, "vue") {
                 imports.insert("vue".to_string(), 
-                    serde_json::json!("https://esm.sh/vue@3.4.0"));
+                    serde_json::json!(format!("https://esm.sh/vue@{}", vue_version)));
             }
         },
         _ => {}
@@ -608,53 +707,69 @@ fn generate_importmap(pkg: &PackageJson, framework: &str) -> serde_json::Value {
     serde_json::json!({ "imports": imports })
 }
 
-fn generate_mount_utils(framework: &str) -> String {
-    // Generate framework-specific mount utilities that will be injected at runtime
+fn generate_mount_utils(pkg: &PackageJson, framework: &str) -> String {
+    // Generate framework-specific mount utilities with full CDN URLs
     match framework {
-        "react" => r#"
-import { createRoot } from 'react-dom/client';
-import { createElement } from 'react';
+        "react" => {
+            let react_version = get_package_version(pkg, "react").unwrap_or("19".to_string());
+            let react_dom_version = get_package_version(pkg, "react-dom").unwrap_or(react_version.clone());
+            format!(r#"
+import {{ createRoot }} from 'https://esm.sh/react-dom@{}/client';
+import {{ createElement }} from 'https://esm.sh/react@{}';
 
-export function mountComponent(Component, slot) {
+export function mountComponent(Component, slot) {{
   const root = createRoot(slot);
   root.render(createElement(Component));
   return () => root.unmount();
-}
-"#.to_string(),
-        "preact" => r#"
-import { render } from 'preact';
-import { createElement } from 'preact';
+}}
+"#, react_dom_version, react_version)
+        },
+        "preact" => {
+            let preact_version = get_package_version(pkg, "preact").unwrap_or("10.19.0".to_string());
+            format!(r#"
+import {{ render }} from 'https://esm.sh/preact@{}';
+import {{ createElement }} from 'https://esm.sh/preact@{}';
 
-export function mountComponent(Component, slot) {
+export function mountComponent(Component, slot) {{
   render(createElement(Component), slot);
   return () => render(null, slot);
-}
-"#.to_string(),
-        "svelte" => r#"
-import { mount, unmount } from 'svelte';
+}}
+"#, preact_version, preact_version)
+        },
+        "svelte" => {
+            let svelte_version = get_package_version(pkg, "svelte").unwrap_or("5.0.0".to_string());
+            format!(r#"
+import {{ mount, unmount }} from 'https://esm.sh/svelte@{}';
 
-export function mountComponent(Component, slot) {
-  const instance = mount(Component, { target: slot });
+export function mountComponent(Component, slot) {{
+  const instance = mount(Component, {{ target: slot }});
   return () => unmount(instance);
-}
-"#.to_string(),
-        "solidjs" => r#"
-import { render } from 'solid-js/web';
+}}
+"#, svelte_version)
+        },
+        "solidjs" => {
+            let solid_version = get_package_version(pkg, "solid-js").unwrap_or("1.9.0".to_string());
+            format!(r#"
+import {{ render }} from 'https://esm.sh/solid-js@{}/web';
 
-export function mountComponent(Component, slot) {
-  const dispose = render(() => Component({}), slot);
+export function mountComponent(Component, slot) {{
+  const dispose = render(() => Component({{}}, slot));
   return () => dispose();
-}
-"#.to_string(),
-        "vue" => r#"
-import { createApp } from 'vue';
+}}
+"#, solid_version)
+        },
+        "vue" => {
+            let vue_version = get_package_version(pkg, "vue").unwrap_or("3.4.0".to_string());
+            format!(r#"
+import {{ createApp }} from 'https://esm.sh/vue@{}';
 
-export function mountComponent(Component, slot) {
+export function mountComponent(Component, slot) {{
   const app = createApp(Component);
   app.mount(slot);
   return () => app.unmount();
-}
-"#.to_string(),
+}}
+"#, vue_version)
+        },
         _ => {
             // Fallback for unknown frameworks
             r#"

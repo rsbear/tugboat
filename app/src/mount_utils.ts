@@ -20,13 +20,11 @@ export function injectImportMap(alias: string, importmap: Record<string, any>) {
  * Loads the mount utilities script for a specific framework
  * This is generated server-side and includes the proper framework imports
  */
-export async function loadMountUtils(alias: string): Promise<any> {
+export async function loadMountUtils(mountUtilsPath: string): Promise<any> {
   const { invoke } = (window as any).__TAURI__.core;
   
   try {
-    const home = await invoke("get_home_dir");
-    const utilsPath = `${home}/.tugboats/bundles/${alias}.mount-utils.js`;
-    const utilsContent = await invoke("read_text_file", { path: utilsPath });
+    const utilsContent = await invoke("read_text_file", { path: mountUtilsPath });
     
     const blob = new Blob([utilsContent], { type: "application/javascript" });
     const url = URL.createObjectURL(blob);
@@ -35,7 +33,7 @@ export async function loadMountUtils(alias: string): Promise<any> {
     
     return mountUtils;
   } catch (e) {
-    console.error('Failed to load mount utils for', alias, e);
+    console.error('Failed to load mount utils from', mountUtilsPath, e);
     throw e;
   }
 }
@@ -47,7 +45,7 @@ export async function mountNewPattern(
   mod: any,
   framework: string,
   slot: HTMLElement,
-  alias: string
+  mountUtilsPath: string
 ): Promise<() => void> {
   const Component = mod.default;
 
@@ -56,7 +54,7 @@ export async function mountNewPattern(
   }
 
   // Load framework-specific mount utilities
-  const mountUtils = await loadMountUtils(alias);
+  const mountUtils = await loadMountUtils(mountUtilsPath);
   
   if (!mountUtils || typeof mountUtils.mountComponent !== 'function') {
     throw new Error(`Mount utils not available for ${framework}`);

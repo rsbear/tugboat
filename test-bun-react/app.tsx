@@ -38,7 +38,7 @@ export default function App() {
   return (
     <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 animate-fade-in">
       <h1 className="text-2xl font-bold text-white">
-        deno is dopey
+        deno is dopeyyy
       </h1>
       <input
         type="text"
