@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 
 app/src/assets/bundle.*
-test-bun-react/.tugboats-dist
-test-bun-svelte/.tugboats-dist
+
+# Tugboats distribution directories
+.tugboats-dist

@@ -5,7 +5,11 @@
     "jsxImportSource": "react"
   },
   "imports": {
-    "react": "npm:react",
-    "@types/react": "npm:@types/react"
+    "@deno/vite-plugin": "npm:@deno/vite-plugin@^1.0.5",
+    "@vitejs/plugin-react": "npm:@vitejs/plugin-react@^5.1.0",
+    "react": "npm:react@^19.2.0",
+    "@types/react": "npm:@types/react",
+    "react-dom": "npm:react-dom@^19.2.0",
+    "vite": "npm:vite@^7.1.12"
   }
 }
