@@ -3,7 +3,6 @@ import ReactDOM from "react-dom/client";
 
 import { input } from "@tugboats/core";
 
-console.log("input", input);
 
 // The App now receives the Harbor API as a prop, allowing it to interact
 // with the main application shell.
@@ -38,7 +37,7 @@ export default function App() {
   return (
     <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 animate-fade-in">
       <h1 className="text-2xl font-bold text-white">
-        deno is dopeyyy
+        deno is dope
       </h1>
       <input
         type="text"
