@@ -1,0 +1,8 @@
+{
+  ".tugboats-mount-wrapper.js": {
+    "file": "reactapp-dev.js",
+    "name": ".tugboats-mount-wrapper",
+    "src": ".tugboats-mount-wrapper.js",
+    "isEntry": true
+  }
+}

@@ -3,6 +3,7 @@ import type { Ref } from "preact";
 import { btn } from "./design/buttons.ts";
 import { content } from "./design/content.ts";
 import { title } from "./design/text.ts";
+import { injectImportMap, mountNewPattern, tryLegacyMount } from "./mount_utils.ts";
 
 const { invoke } = (window as any).__TAURI__.core;
 const { listen } = (window as any).__TAURI__.event;
@@ -65,6 +66,21 @@ export function MountDevApp(props: { alias: string }) {
     if (!slotRef.current) return;
 
     try {
+      // 1. Try to fetch metadata (contains framework and import map)
+      let metadata: any = null;
+      try {
+        metadata = await invoke("read_bundle_metadata", { alias });
+        console.log("🚢 DEBUG: Dev metadata loaded:", metadata);
+      } catch (metaErr) {
+        console.warn("🚢 DEBUG: No metadata found, assuming legacy bundle");
+      }
+
+      // 2. Inject import map if available
+      if (metadata?.importmap) {
+        injectImportMap(alias, metadata.importmap);
+      }
+
+      // 3. Load dev bundle
       const home = await invoke("get_home_dir");
       const bundlePath = `${home}/.tugboats/bundles/${alias}-dev.js`;
       const bundleContent = await invoke("read_text_file", {
@@ -83,17 +99,29 @@ export function MountDevApp(props: { alias: string }) {
 
       moduleRef.current = mod;
 
-      const mount = mod.tugboatReact || mod.tugboatSvelte || mod.mount ||
-        mod.default;
-      if (typeof mount === "function") {
-        const dispose = await mount(slotRef.current);
-        if (typeof dispose === "function") {
-          cleanupRef.current = dispose;
-        }
-        setStatus("active");
+      let dispose: (() => void) | null = null;
+
+      // 4. Try bundled mountComponent function first
+      if (typeof mod.mountComponent === 'function') {
+        console.log("🚢 DEBUG: Using bundled mountComponent");
+        dispose = mod.mountComponent(slotRef.current);
+      } else if (metadata?.framework && metadata?.mount_utils_path && mod.default) {
+        console.log("🚢 DEBUG: Using new pattern with framework:", metadata.framework);
+        dispose = await mountNewPattern(mod, metadata.framework, slotRef.current, metadata.mount_utils_path);
       } else {
-        throw new Error("No mount function exported from dev module");
+        // 5. Fall back to legacy patterns
+        console.log("🚢 DEBUG: Trying legacy mount patterns");
+        dispose = await tryLegacyMount(mod, slotRef.current);
+        
+        if (!dispose) {
+          throw new Error("No mount function exported from dev module");
+        }
       }
+
+      if (dispose) {
+        cleanupRef.current = dispose;
+      }
+      setStatus("active");
     } catch (e) {
       console.error("Failed to load dev bundle:", e);
       addLog("error", `Failed to load bundle: ${e}`);
