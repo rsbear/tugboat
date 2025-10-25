@@ -43,7 +43,7 @@ A tugboat app can read/write the input. In doing this developers can choose what
 .
 ├── package.json
 ├── README.md
-├── tugboat.ts(x) or tugboat.js(x)
+├── app.ts(x) or app.js(x)
 └── tsconfig.json
 ```
 
@@ -51,15 +51,12 @@ A tugboat app can read/write the input. In doing this developers can choose what
 ```bash
 .
 ├── package.json
-├── App.tsx
-└── tugboat.ts
+└── app.tsx
 ```
-```typescript
-// tugboat.ts
-import App from './App.tsx'
-export function tugboatReact(domNode: HTMLElement) {
-  const root = ReactDOM.createRoot(targetElement);
-	root.render(<App />);
+```tsx
+// app.tsx
+export default function App() {
+  return <div>hello world</div>
 }
 ```
 
@@ -67,16 +64,13 @@ export function tugboatReact(domNode: HTMLElement) {
 ```bash
 .
 ├── package.json
-├── App.svelte
-└── tugboat.ts
+└── App.svelte
 ```
-```typescript
-// tugboat.ts
-import { mount } from "svelte";
-import App from './App.svelte'
-export function tugboatSvelte(domNode: HTMLElement) {
-    mount(App, { target, props: { hello: "world" } });
-}
+```svelte
+<script>
+  console.log("Suh dude")
+</script>
+<div>hello world</div>
 ```
 
 ---
@@ -93,6 +87,7 @@ export function tugboatSvelte(domNode: HTMLElement) {
 ```bash
 just dev
 ```
+
 *Cargo check*
 ```bash
 just check_cargo
